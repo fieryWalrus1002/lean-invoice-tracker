@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 from sqlmodel import select
 
-from src.models import Client, Invoice, TimeLog
+from src.models import Client, Invoice, InvoiceSequence, TimeLog
 from src.database import get_session
 
 logger = logging.getLogger(__name__)
@@ -122,69 +122,59 @@ def generate_invoice_transaction(session: Session, client_id: int) -> Invoice:
         len(unbilled_logs), total_hours, client.default_hourly_rate, total_amount,
     )
 
-    # Mint unique tracking sequence string with retry for collisions
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        invoice_num = _next_invoice_number(session)
-        try:
-            # Commit state updates
-            new_invoice = Invoice(
-                invoice_number=invoice_num,
-                due_date=_date.today() + timedelta(days=30),
-                total_amount=total_amount,
-                client_id=client_id,
-            )
-            session.add(new_invoice)
-            session.flush()  # Extract assigned id
+    # Mint unique invoice number using atomic sequence counter
+    invoice_num = _next_invoice_number(session)
 
-            for log in unbilled_logs:
-                log.is_billed = True
-                log.invoice_id = new_invoice.id
-                session.add(log)
+    # Commit state updates
+    new_invoice = Invoice(
+        invoice_number=invoice_num,
+        due_date=_date.today() + timedelta(days=30),
+        total_amount=total_amount,
+        client_id=client_id,
+    )
+    session.add(new_invoice)
+    session.flush()  # Extract assigned id
 
-            session.commit()
-            logger.info("Invoice %s created for client_id=%s", invoice_num, client_id)
-            return new_invoice
-        except Exception:
-            session.rollback()
-            if attempt < max_retries:
-                logger.warning(
-                    "Invoice number collision on attempt %d, retrying…",
-                    attempt,
-                    exc_info=True,
-                )
-                time.sleep(0.05)
-            else:
-                logger.error(
-                    "Failed to generate invoice after %d attempts, client_id=%s",
-                    max_retries, client_id,
-                    exc_info=True,
-                )
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to generate invoice after multiple attempts.",
-                )
+    for log in unbilled_logs:
+        log.is_billed = True
+        log.invoice_id = new_invoice.id
+        session.add(log)
+
+    session.commit()
+    logger.info("Invoice %s created for client_id=%s", invoice_num, client_id)
+    return new_invoice
 
 
 def _next_invoice_number(session: Session) -> str:
     """Return the next sequential invoice number for the current year.
 
-    Raises an HTTPException on collision after checking.
+    Uses an atomic database-level sequence counter to prevent collisions
+    even under concurrent access.
+
+    If the sequence row doesn't exist yet, it's initialized to the next
+    number after any existing invoices for this year.
     """
     year = _date.today().year
-    existing = session.exec(
-        select(Invoice.invoice_number)
-        .where(Invoice.invoice_number.like(f"INV-{year}-%"))
-    ).all()
-    count = len(existing)
-    candidate = f"INV-{year}-{count + 1:04d}"
 
-    # Verify the candidate isn't already taken (collision check)
-    if any(inv == candidate for inv in existing):
-        # Collision: try the next number
-        candidate = f"INV-{year}-{count + 2:04d}"
+    # Atomically increment the sequence counter
+    seq = session.get(InvoiceSequence, year)
+    if seq is None:
+        # Initialize sequence based on existing invoices for this year
+        existing = session.exec(
+            select(Invoice.invoice_number)
+            .where(Invoice.invoice_number.like(f"INV-{year}-%"))
+        ).all()
+        next_num = len(existing) + 1
+        seq = InvoiceSequence(year=year, next_number=next_num + 1)
+        session.add(seq)
+        session.flush()
+    else:
+        next_num = seq.next_number
+        seq.next_number += 1
+        session.flush()
 
-    return candidate
+    invoice_num = f"INV-{year}-{next_num:04d}"
+    return invoice_num
 
 
 # ── Unbilled Logs Query ─────────────────────────────────────────────────────
