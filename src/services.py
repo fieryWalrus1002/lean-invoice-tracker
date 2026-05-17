@@ -78,9 +78,10 @@ def generate_invoice_transaction(session: Session, client_id: int) -> Invoice:
     if not client:
         raise HTTPException(status_code=404, detail="Client not found.")
 
-    unbilled_logs = session.query(TimeLog).filter(
-        TimeLog.client_id == client_id,
-        TimeLog.is_billed == False
+    unbilled_logs = session.exec(
+        select(TimeLog)
+        .where(TimeLog.client_id == client_id)
+        .where(TimeLog.is_billed == False)
     ).all()
 
     if not unbilled_logs:
@@ -91,9 +92,11 @@ def generate_invoice_transaction(session: Session, client_id: int) -> Invoice:
     total_amount = total_hours * client.default_hourly_rate
 
     # Mint unique tracking sequence string (atomic counter to prevent race conditions)
-    max_invoice = session.query(Invoice).filter(
-        Invoice.invoice_number.like(f"INV-{_date.today().year}-%")
-    ).count()
+    max_invoice = session.exec(
+        select(Invoice.invoice_number)
+        .where(Invoice.invoice_number.like(f"INV-{_date.today().year}-%"))
+    ).all()
+    max_invoice = len(max_invoice)
     invoice_num = f"INV-{_date.today().year}-{max_invoice + 1:04d}"
 
     # Commit state updates

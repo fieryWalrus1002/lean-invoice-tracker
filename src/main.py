@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import HTTPException
+import jinja2
+from pydantic import ValidationError
 from sqlmodel import select
 from sqlalchemy.orm import Session
 
@@ -27,7 +29,13 @@ app = FastAPI(title="Lean Invoice Tracker")
 
 # Resolve the templates directory relative to this file
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# Disable Jinja2 template cache to avoid TypeError with unhashable context dicts
+template_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(str(BASE_DIR / "templates")),
+    autoescape=jinja2.select_autoescape(),
+    cache_size=0,  # Disable template caching
+)
+templates = Jinja2Templates(env=template_env)
 
 # Create tables on startup
 create_db_and_tables()
@@ -38,7 +46,7 @@ create_db_and_tables()
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Renders the front-end dashboard UI template."""
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "dashboard.html")
 
 
 # ── API: Clients ─────────────────────────────────────────────────────────────
@@ -90,8 +98,20 @@ async def create_time_log(
         )
     else:
         # Fall back to JSON body (CLI submission)
-        body = await request.json()
-        create_data = TimeLogCreate(**body)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Invalid JSON body"},
+            )
+        try:
+            create_data = TimeLogCreate(**body)
+        except ValidationError as e:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": str(e)},
+            )
 
     if create_data.date is None:
         create_data.date = _date.today()
