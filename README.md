@@ -92,6 +92,7 @@ log_hours 1 2.0 "Code review" "2026-05-15"
 | `POST` | `/api/clients` | Create a client (deduplicates by name) |
 | `GET` | `/api/clients` | List all clients (deduplicated) |
 | `GET` | `/api/clients/html` | List clients as HTML (HTMX) |
+| `DELETE` | `/api/clients/{id}` | Delete a client (returns 409 if time logs exist) |
 
 **Note:** Creating a client with a name that already exists returns the existing client instead of creating a duplicate. Listing clients always returns unique entries.
 
@@ -204,7 +205,7 @@ lean-invoice-tracker/
 uv run pytest
 ```
 
-87 tests covering models, database, services, API endpoints, and PDF generation.
+94 tests covering models, database, services, API endpoints, and PDF generation.
 
 ### Smoke Tests
 

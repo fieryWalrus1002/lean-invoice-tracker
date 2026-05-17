@@ -4,8 +4,8 @@
 
 ### Current State
 - **Branch:** All work merged to `main`
-- **Tests:** 83 pytest + 8 smoke tests — all passing
-- **PRs:** 6 merged (#1–#6), plus 1 docs update (#7)
+- **Tests:** 94 pytest + 8 smoke tests — all passing
+- **PRs:** 12 merged (#1–#12)
 - **Status:** 🟢 Production-ready, feature-complete
 
 ### What's Done
@@ -16,7 +16,7 @@
 | API endpoints | ✅ 10 endpoints working |
 | UI | ✅ HTMX dashboard with dynamic dropdowns |
 | PDF generation | ✅ Jinja2 template + WeasyPrint |
-| Test suite | ✅ 83 pytest + 8 smoke tests |
+| Test suite | ✅ 94 pytest + 8 smoke tests |
 | Production hardening | ✅ Validation, logging, atomic invoices |
 | Documentation | ✅ README, DEPLOYMENT, scripts/README, PROJECT_STATUS |
 
@@ -62,7 +62,7 @@ docker compose up --build -d
 | `src/database.py` | Engine, WAL mode, session management |
 | `src/utils/pdf.py` | PDF generation (Jinja2 + WeasyPrint) |
 | `src/templates/` | dashboard.html, invoice.html |
-| `tests/` | 83 pytest tests |
+| `tests/` | 94 pytest tests |
 | `scripts/smoke_test.py` | Live integration tests |
 
 ### Architecture Notes

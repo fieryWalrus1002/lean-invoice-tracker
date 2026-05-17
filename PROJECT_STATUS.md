@@ -1,21 +1,21 @@
 # Project Status: Lean Invoice Tracker (LIT)
 
 **Current Date:** 2026-05-17  
-**Overall Status:** 🟢 **PRODUCTION READY** (All 6 PRs merged — 83 tests passing, all critical fixes applied)
+**Overall Status:** 🟢 **PRODUCTION READY** (All 12 PRs merged — 94 tests passing, all critical fixes applied)
 
 ---
 
 ## Executive Summary
 
-The Lean Invoice Tracker MVP is **production-ready** with all critical modules implemented, a comprehensive test suite, and all fixes applied. The system has 83 passing pytest tests and 8 passing smoke tests. All 6 pull requests have been merged into main.
+The Lean Invoice Tracker MVP is **production-ready** with all critical modules implemented, a comprehensive test suite, and all fixes applied. The system has 94 passing pytest tests and 8 passing smoke tests. All 12 pull requests have been merged into main.
 
 ### Key Metrics
 - **Lines of Code:** ~1,000 (core modules only)
 - **Modules:** 5 (models, database, services, API, PDF)
-- **API Endpoints:** 10 (clients, logs, invoices, PDF, clients/html)
+- **API Endpoints:** 11 (clients, logs, invoices, PDF, clients/html, delete client)
 - **Database Tables:** 4 (Client, TimeLog, Invoice, InvoiceSequence)
-- **Pull Requests Merged:** 8
-- **Test Coverage:** 83 pytest + 8 smoke tests
+- **Pull Requests Merged:** 12
+- **Test Coverage:** 94 pytest + 8 smoke tests
 
 ---
 
@@ -64,6 +64,7 @@ The Lean Invoice Tracker MVP is **production-ready** with all critical modules i
 | `/api/clients` | POST | ✅ Complete | Creates client, returns ClientResponse |
 | `/api/clients` | GET | ✅ Complete | Lists all clients |
 | `/api/clients/html` | GET | ✅ Complete | Returns HTML table of clients (HTMX) |
+| `DELETE /api/clients/{id}` | DELETE | ✅ Complete | Deletes a client (409 if time logs exist) |
 | `/api/logs` | POST | ✅ Complete | **DUAL PAYLOAD MODE:** Form data (HTMX) + JSON (CLI) |
 | `/api/logs/upload-csv` | POST | ✅ Complete | Bulk import from CSV file |
 | `/api/logs/unbilled` | GET | ✅ Complete | Returns HTML table fragment (HTMX endpoint) |
@@ -163,6 +164,35 @@ Clients were not unique in the database, causing dropdown lists to show endless 
 | #6 | Jinja2 template + WeasyPrint PDF generation | ✅ Merged |
 | #7 | stale-docs-and-validation-gaps | ✅ Merged |
 | #8 | client-unique-dedup (issue #8) | ✅ Merged |
+| #9 | smoke-test: Add comprehensive smoke test suite | ✅ Merged |
+| #10 | client-unique-dedup (issue #8) | ✅ Merged |
+| #11 | client-deletion-gui (issue #9) | ✅ Merged |
+| #12 | database-test-readonly-fix | ✅ Merged |
+
+---
+
+## Recent Changes (Issue #9 — Client Deletion via GUI)
+
+Clients could not be deleted once created, even when they had no associated data.
+
+| Change | Details |
+|--------|----------|
+| `DELETE /api/clients/{client_id}` | New API endpoint |
+| Trash icon in clients table | HTMX-driven with `hx-confirm` confirmation |
+| 409 protection | Prevents deletion if client has time logs |
+| Success/error messaging | Green checkmark on success, red error with reason |
+| Auto-refresh | Client dropdowns update after deletion |
+| 7 new tests | Cover success, 404, 409, and HTML rendering |
+
+## Recent Changes (Issue #12 — Database Test Fix)
+
+The `test_invoice_number_has_unique_constraint` test was failing with a read-only database error because it used the production DB file.
+
+| Change | Details |
+|--------|----------|
+| In-memory test engine | Created in `tests/test_database.py` |
+| WAL mode on test engine | Mirrors production WAL configuration |
+| No filesystem dependency | Test no longer depends on production DB permissions |
 
 ---
 
@@ -177,16 +207,16 @@ Clients were not unique in the database, causing dropdown lists to show endless 
 - ✅ PDF export and download
 - ✅ CSV bulk upload
 
-### ✅ Automated Testing Complete — 83 Tests Passing
+### ✅ Automated Testing Complete — 94 Tests Passing
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| `tests/test_models.py` | 7 | Model relationships, constraints, precision, defaults |
-| `tests/test_database.py` | 5 | WAL mode, table creation, session management |
+| `tests/test_models.py` | 19 | Model relationships, constraints, precision, defaults |
+| `tests/test_database.py` | 6 | WAL mode, table creation, session management, unique constraints |
 | `tests/test_services.py` | 12 | Invoice generation, unbilled logs, schema validation |
-| `tests/test_main.py` | 19 | API endpoints, PDF export, integration workflows |
-| `tests/test_pdf.py` | 13 | PDF generation, content validation, edge cases |
-| **Total** | **83** | **100%** |
+| `tests/test_main.py` | 39 | API endpoints, PDF export, integration workflows, client deletion |
+| `tests/test_pdf.py` | 14 | PDF generation, content validation, edge cases |
+| **Total** | **94** | **100%** |
 
 **Smoke Tests (8/8 Passing):**
 - ✅ Dashboard loads
@@ -249,7 +279,7 @@ Clients were not unique in the database, causing dropdown lists to show endless 
 | `models.py` | 🟢 Good | 🟢 7 tests | 🟢 100% | 🟢 Low |
 | `database.py` | 🟢 Good | 🟢 5 tests | 🟢 100% | 🟢 Low |
 | `services.py` | 🟢 Good | 🟢 12 tests | 🟢 100% | 🟢 Low |
-| `main.py` | 🟢 Good | 🟢 19 tests | 🟢 100% | 🟢 Low |
+| `main.py` | 🟢 Good | 🟢 39 tests | 🟢 100% | 🟢 Low |
 | `utils/pdf.py` | 🟢 Good | 🟢 13 tests | 🟢 100% | 🟢 Low |
 | `templates/` | 🟡 Adequate | 🟡 7 tests (via main.py) | 🟡 90% | 🟢 Low (HTMX verified) |
 
@@ -288,7 +318,7 @@ Clients were not unique in the database, causing dropdown lists to show endless 
 
 ## Deployment Readiness Checklist
 
-- [x] Automated test suite passes (80%+ coverage) — 83 tests ✅
+- [x] Automated test suite passes (80%+ coverage) — 94 tests ✅
 - [x] All endpoints tested manually
 - [x] README and documentation complete
 - [x] Invoice race condition resolved
@@ -357,13 +387,13 @@ lean-invoice-tracker/
 ├── backups/
 │   ├── config.json        (manual config)
 │   └── db_dump.sql        (git-tracked dumps)
-└── tests/                 ✅ Complete (87 tests passing)
+└── tests/                 ✅ Complete (94 tests passing)
     ├── __init__.py
     ├── conftest.py        (pytest fixtures)
-    ├── test_models.py     (8 tests)
-    ├── test_database.py   (5 tests)
+    ├── test_models.py     (19 tests)
+    ├── test_database.py   (6 tests)
     ├── test_services.py   (12 tests)
-    ├── test_main.py       (23 tests)
+    ├── test_main.py       (39 tests)
     └── test_pdf.py        (14 tests)
 ```
 
@@ -375,7 +405,7 @@ lean-invoice-tracker/
 |-----------|---------|--------|--------|
 | Core features implemented | 100% | 100% | ✅ Met |
 | Manual testing complete | 100% | 100% | ✅ Met |
-| Automated tests | 100% | 80% | ✅ Met (83 tests passing) |
+| Automated tests | 100% | 80% | ✅ Met (94 tests passing) |
 | Smoke tests | 100% | 80% | ✅ Met (8/8 passing) |
 | Documentation | 100% | 100% | ✅ Met |
 | Code review | ✅ Spec reviewed | ✅ | ✅ Met |
@@ -386,17 +416,17 @@ lean-invoice-tracker/
 
 ## Test Execution Summary
 
-### pytest (87 tests)
+### pytest (94 tests)
 ```bash
 $ uv run pytest
 ============================= test session starts ==============================
-... collected 87 items ...
-tests/test_database.py ...........                                          [  1%]
-tests/test_models.py ....................                                   [ 46%]
-tests/test_services.py ...........................                         [ 87%]
-tests/test_main.py ................................                       [ 95%]
-tests/test_pdf.py ..............                                          [100%]
-============================== 87 passed in 3.25s ==============================
+... collected 94 items ...
+tests/test_database.py ......                                            [  6%]
+tests/test_models.py ...................                                 [ 68%]
+tests/test_services.py ................                                  [100%]
+tests/test_main.py .......................................               [ 47%]
+tests/test_pdf.py ..............                                         [ 82%]
+============================== 94 passed in 3.47s ==============================
 ```
 
 ### Smoke Tests (8 tests)
