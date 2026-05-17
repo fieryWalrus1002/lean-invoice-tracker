@@ -64,7 +64,7 @@
             <form id="add-client-form"
                   hx-post="/api/clients"
                   hx-swap="none"
-                  hx-on::after-request="if(event.detail.successful){this.reset();fetch('/api/clients/html').then(r=>r.text()).then(h=>document.getElementById('clients-container').innerHTML=h);fetch('/api/clients').then(r=>r.json()).then(clients=>{const opts='<option value=\"\">Select Client</option>'+clients.map(c=>\`<option value=\"${c.id}\">${c.name} (${c.default_hourly_rate}/h)</option>\").join('');document.querySelectorAll(\"select[name='client_id']\").forEach(s=>s.innerHTML=opts);});}else{let msg='Unknown error.';try{msg=JSON.parse(event.detail.xhr.responseText).detail||msg;}catch(e){msg='Could not add client.';}const d=document.getElementById('delete-message');if(d){d.innerHTML=\`<p class=\"text-red-400 text-sm\">✗ \${msg}</p>\`;setTimeout(()=>{d.innerHTML='';},5000);}}"
+                  hx-on::after-request="handleClientFormResponse(event)"
                   class="grid grid-cols-5 gap-4 mb-6">
                 <input type="text" name="name" placeholder="Client name" required
                        class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -95,7 +95,8 @@
             <form id="invoice-form"
                   hx-post="/api/clients/0/invoices"
                   hx-swap="none"
-                  hx-on::after-request="if(event.detail.successful){const m=document.getElementById('delete-message');if(m){m.innerHTML='<p class=\"text-green-400 text-sm\">✓ Invoice generated successfully.</p>';setTimeout(()=>{m.innerHTML='';},3000);}fetch('/api/logs/unbilled').then(r=>r.text()).then(h=>document.getElementById('unbilled-table-container').innerHTML=h);fetch('/api/clients').then(r=>r.json()).then(clients=>{const opts='<option value=\"\">Select Client</option>'+clients.map(c=>\`<option value=\"${c.id}\">${c.name} (${c.default_hourly_rate}/h)</option>\").join('');document.querySelectorAll(\"select[name='client_id']\").forEach(s=>s.innerHTML=opts);});}else{let msg='Unknown error.';try{msg=JSON.parse(event.detail.xhr.responseText).detail||msg;}catch(e){msg='Could not generate invoice.';}const d=document.getElementById('delete-message');if(d){d.innerHTML=\`<p class=\"text-red-400 text-sm\">✗ \${msg}</p>\`;setTimeout(()=>{d.innerHTML='';},5000);}}"
+                  hx-on::before-request="updateInvoiceAction()"
+                  hx-on::after-request="handleInvoiceFormResponse(event)"
                   class="grid grid-cols-3 gap-4">
                 <select name="client_id" id="invoice-client-select" required
                         class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -106,78 +107,105 @@
                     Generate Invoice
                 </button>
             </form>
+            <div id="invoice-message" class="mt-3"></div>
         </section>
     </main>
 
-    <!-- Handle client deletion and dropdown updates -->
+    <!-- Handle HTMX responses -->
     <script>
-        // Handle HTMX delete response: refresh clients and show success/error
+        // --- Shared helpers ---
+        function refreshClientsTable() {
+            fetch('/api/clients/html')
+                .then(r => r.text())
+                .then(h => document.getElementById('clients-container').innerHTML = h);
+        }
+        function refreshClientDropdowns() {
+            fetch('/api/clients')
+                .then(r => r.json())
+                .then(clients => {
+                    const opts = '<option value="">Select Client</option>' +
+                        clients.map(c => '<option value="' + c.id + '">' + c.name + ' (' + c.default_hourly_rate + '/h)</option>').join('');
+                    document.querySelectorAll("select[name='client_id']").forEach(s => s.innerHTML = opts);
+                });
+        }
+        function showMessage(elementId, text, isError) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.innerHTML = '<p class="text-' + (isError ? 'red' : 'green') + '-400 text-sm">' + text + '</p>';
+                setTimeout(() => { el.innerHTML = ''; }, 5000);
+            }
+        }
+        function parseErrorMessage(responseText) {
+            try { return JSON.parse(responseText).detail; }
+            catch (e) { return 'Request failed.'; }
+        }
+
+        // --- Add Client Form ---
+        function handleClientFormResponse(event) {
+            if (event.detail.successful) {
+                document.getElementById('add-client-form').reset();
+                refreshClientsTable();
+                refreshClientDropdowns();
+            } else {
+                showMessage('delete-message', '✗ ' + parseErrorMessage(event.detail.xhr.responseText), true);
+            }
+        }
+
+        // --- Invoice Form ---
+        // Update the hx-post URL right before the request fires (no race condition)
+        function updateInvoiceAction() {
+            const select = document.getElementById('invoice-client-select');
+            const form = document.getElementById('invoice-form');
+            if (select && form) {
+                const clientId = select.value;
+                if (clientId) {
+                    form.setAttribute('hx-post', '/api/clients/' + clientId + '/invoices');
+                }
+            }
+        }
+        function handleInvoiceFormResponse(event) {
+            if (event.detail.successful) {
+                showMessage('invoice-message', '✓ Invoice generated successfully.', false);
+                fetch('/api/logs/unbilled')
+                    .then(r => r.text())
+                    .then(h => document.getElementById('unbilled-table-container').innerHTML = h);
+                refreshClientDropdowns();
+            } else {
+                showMessage('invoice-message', '✗ ' + parseErrorMessage(event.detail.xhr.responseText), true);
+            }
+        }
+
+        // Handle HTMX delete response
         document.addEventListener("htmx:afterRequest", function(event) {
             const detail = event.detail;
-            const target = detail.target;
-            // Check if this was a delete request on a client button
             if (detail.requestConfig && detail.requestConfig[0] &&
                 detail.requestConfig[0].method === "DELETE" &&
                 detail.requestConfig[0].pathInfo &&
                 detail.requestConfig[0].pathInfo.pathSegments &&
                 detail.requestConfig[0].pathInfo.pathSegments[0] === "/api/clients") {
 
-                const deleteMsg = document.getElementById("delete-message");
                 if (detail.successful) {
-                    // Success: show message and refresh clients table + dropdowns
-                    if (deleteMsg) {
-                        deleteMsg.innerHTML = `<p class="text-green-400 text-sm">✓ Client deleted successfully.</p>`;
-                        setTimeout(() => { deleteMsg.innerHTML = ""; }, 3000);
-                    }
-                    // Refresh the clients table (the HTML table)
+                    showMessage('delete-message', '✓ Client deleted successfully.', false);
                     fetch("/api/clients/html")
                         .then(res => res.text())
                         .then(html => {
                             document.getElementById("clients-container").innerHTML = html;
                         });
-                    // Refresh the client dropdowns
                     fetch("/api/clients")
                         .then(res => res.json())
                         .then(clients => {
                             const options = '<option value="">Select Client</option>' +
                                 clients.map(c =>
-                                    `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
+                                    '<option value="' + c.id + '">' + c.name + ' (' + c.default_hourly_rate + '/h)</option>'
                                 ).join("");
                             document.querySelectorAll("select[name='client_id']").forEach(sel => {
                                 sel.innerHTML = options;
                             });
                         });
                 } else {
-                    // Error: show error message
-                    let msg = "Unknown error.";
-                    try {
-                        const err = JSON.parse(detail.xhr.responseText);
-                        msg = err.detail || msg;
-                    } catch (e) {
-                        msg = "Could not delete client.";
-                    }
-                    if (deleteMsg) {
-                        deleteMsg.innerHTML = `<p class="text-red-400 text-sm">✗ ${msg}</p>`;
-                        setTimeout(() => { deleteMsg.innerHTML = ""; }, 5000);
-                    }
+                    showMessage('delete-message', '✗ ' + parseErrorMessage(detail.xhr.responseText), true);
                 }
             }
-        });
-
-        // Listen for loadClients trigger to refresh client dropdowns
-        document.addEventListener("loadClients", function() {
-            fetch("/api/clients")
-                .then(res => res.json())
-                .then(clients => {
-                    const options = '<option value="">Select Client</option>' +
-                        clients.map(c =>
-                            `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
-                        ).join("");
-
-                    document.querySelectorAll("select[name='client_id']").forEach(sel => {
-                        sel.innerHTML = options;
-                    });
-                });
         });
 
         // Listen for refreshUnbilled trigger to reload the unbilled logs table
@@ -189,35 +217,9 @@
                 });
         });
 
-        // Populate all client dropdowns on HTMX load
-        document.addEventListener("htmx:load", function(event) {
-            fetch("/api/clients")
-                .then(res => res.json())
-                .then(clients => {
-                    const options = '<option value="">Select Client</option>' +
-                        clients.map(c =>
-                            `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
-                        ).join("");
-
-                    document.querySelectorAll("select[name='client_id']").forEach(sel => {
-                        sel.innerHTML = options;
-                    });
-
-                    // Update invoice form action URL based on selected client
-                    const invoiceForm = document.getElementById("invoice-form");
-                    const invoiceSelect = document.getElementById("invoice-client-select");
-                    if (invoiceForm && invoiceSelect) {
-                        // Update action when selection changes
-                        invoiceSelect.addEventListener("change", function() {
-                            const clientId = this.value;
-                            if (clientId) {
-                                invoiceForm.setAttribute("hx-post", `/api/clients/${clientId}/invoices`);
-                            } else {
-                                invoiceForm.setAttribute("hx-post", "/api/clients/0/invoices");
-                            }
-                        });
-                        }
-                });
+        // Populate all client dropdowns once on page load
+        document.addEventListener("DOMContentLoaded", function() {
+            refreshClientDropdowns();
         });
 
     </script>

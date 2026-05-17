@@ -4,7 +4,7 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, Header, Query, Request, UploadFile, File
+from fastapi import Depends, FastAPI, Form, Header, Query, Request, UploadFile, File, Body
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -62,30 +62,38 @@ async def dashboard(request: Request):
 # ── API: Clients ─────────────────────────────────────────────────────────────
 
 @app.post("/api/clients", response_model=ClientResponse)
-async def create_client(client: ClientCreate, session: Session = Depends(get_session)):
+async def create_client(
+    name: str = Form(...),
+    email: str = Form(...),
+    billing_address: str = Form(""),
+    default_hourly_rate: float = Form(0.00),
+    session: Session = Depends(get_session),
+):
     """Creates a new tracking client profile.
 
-    Expects a JSON body with ``name``, ``email``, ``billing_address``,
-    and optionally ``default_hourly_rate`` (defaults to 0.00).
+    Accepts either form-encoded data (HTMX) or JSON body (CLI).
+
+    Form fields: ``name``, ``email``, ``billing_address``, ``default_hourly_rate``.
+    JSON body: {"name": "...", "email": "...", "billing_address": "...", "default_hourly_rate": 0.00}
 
     If a client with the same name already exists, returns the existing
     client instead of creating a duplicate.
     """
-    logger.info("Creating client: %s", client.name)
+    logger.info("Creating client: %s", name)
 
     # Check for existing client with the same name
     existing = session.exec(
-        select(Client).where(Client.name == client.name)
+        select(Client).where(Client.name == name)
     ).first()
     if existing:
-        logger.info("Client already exists: name=%s id=%s", client.name, existing.id)
+        logger.info("Client already exists: name=%s id=%s", name, existing.id)
         return existing
 
     db_client = Client(
-        name=client.name,
-        email=client.email,
-        billing_address=client.billing_address,
-        default_hourly_rate=client.default_hourly_rate,
+        name=name,
+        email=email,
+        billing_address=billing_address,
+        default_hourly_rate=default_hourly_rate,
     )
     session.add(db_client)
     session.commit()
