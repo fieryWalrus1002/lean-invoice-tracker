@@ -63,7 +63,8 @@
             <form id="add-client-form"
                   hx-post="/api/clients"
                   hx-target="#clients-container"
-                  hx-swap="afterbegin"
+                  hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful) this.reset()"
                   class="grid grid-cols-5 gap-4 mb-6">
                 <input type="text" name="name" placeholder="Client name" required
                        class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -78,8 +79,12 @@
                     Add Client
                 </button>
             </form>
-            <div id="clients-container">
-                <!-- Populated via HTMX on page load -->
+            <div id="clients-container"
+                 hx-get="/api/clients/html"
+                 hx-trigger="load">
+                <div class="bg-gray-800 p-6 rounded border border-gray-700">
+                    <p class="text-gray-500">Loading...</p>
+                </div>
             </div>
         </section>
 
@@ -87,7 +92,7 @@
         <section class="bg-gray-800 p-6 rounded border border-gray-700">
             <h2 class="text-lg font-bold mb-4">Generate Invoice</h2>
             <form id="invoice-form"
-                  hx-post="/api/clients/__CLIENT_ID__/invoices"
+                  hx-post="/api/clients/0/invoices"
                   hx-target="#unbilled-table-container"
                   hx-swap="innerHTML"
                   class="grid grid-cols-3 gap-4">
@@ -103,8 +108,9 @@
         </section>
     </main>
 
-    <!-- Populate client dropdowns via HTMX -->
+    <!-- Populate client dropdowns and update invoice form action -->
     <script>
+        // Populate all client dropdowns on HTMX load
         document.addEventListener("htmx:load", function(event) {
             fetch("/api/clients")
                 .then(res => res.json())
@@ -117,7 +123,45 @@
                     document.querySelectorAll("select[name='client_id']").forEach(sel => {
                         sel.innerHTML = options;
                     });
+
+                    // Update invoice form action URL based on selected client
+                    const invoiceForm = document.getElementById("invoice-form");
+                    const invoiceSelect = document.getElementById("invoice-client-select");
+                    if (invoiceForm && invoiceSelect) {
+                        // Update action when selection changes
+                        invoiceSelect.addEventListener("change", function() {
+                            const clientId = this.value;
+                            if (clientId) {
+                                invoiceForm.setAttribute("hx-post", `/api/clients/${clientId}/invoices`);
+                            } else {
+                                invoiceForm.setAttribute("hx-post", "/api/clients/0/invoices");
+                            }
+                        });
+                        // Also handle HTMX swap after invoice generation
+                        invoiceForm.addEventListener("htmx:afterOnLoad", function() {
+                            // Refresh clients to update dropdowns
+                            htmx.trigger(document.body, "loadClients");
+                        });
+                    }
                 });
+        });
+
+        // Refresh clients after invoice generation
+        document.addEventListener("htmx:afterOnLoad", function(event) {
+            if (event.target.id === "invoice-form") {
+                fetch("/api/clients")
+                    .then(res => res.json())
+                    .then(clients => {
+                        const options = '<option value="">Select Client</option>' +
+                            clients.map(c =>
+                                `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
+                            ).join("");
+                        const invoiceSelect = document.getElementById("invoice-client-select");
+                        if (invoiceSelect) {
+                            invoiceSelect.innerHTML = options;
+                        }
+                    });
+            }
         });
     </script>
 </body>
