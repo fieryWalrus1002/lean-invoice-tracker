@@ -25,20 +25,18 @@ from src.main import app  # noqa: E402
 
 
 def _decompress_pdf_content(pdf_bytes):
-    """Decompress PDF streams (ReportLab uses ASCII85 + FlateDecode)."""
+    """Extract text from PDF bytes using pypdf (WeasyPrint produces standard PDFs)."""
     try:
-        from reportlab.lib.rl_accel import asciiBase85Decode
-        decompressed = b""
-        for match in re.finditer(rb'stream\n(.*?)~>', pdf_bytes, re.DOTALL):
-            stream_data = match.group(1)
-            try:
-                decoded = asciiBase85Decode(stream_data + b'~>')
-                decompressed += zlib.decompress(decoded)
-            except Exception:
-                decompressed += stream_data
-        return decompressed
+        from pypdf import PdfReader
+        import io
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        text_parts = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            text_parts.append(text)
+        return "\n".join(text_parts)
     except Exception:
-        return pdf_bytes
+        return pdf_bytes.decode("utf-8", errors="replace")
 
 TEST_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "test_invoices.db"
 TEST_DB_URL = f"sqlite:///{TEST_DB_PATH}"
@@ -458,7 +456,7 @@ class TestPDFExport:
             invoice_number = inv_resp.json()["invoice_number"]
             # PDF content is compressed; decompress before searching
             searchable = _decompress_pdf_content(pdf_data)
-            assert invoice_number.encode() in searchable
+            assert invoice_number in searchable
 
     def test_pdf_content_includes_client_name(self):
         """PDF content includes the client name."""
@@ -473,7 +471,7 @@ class TestPDFExport:
             pdf_data = response.content
             # PDF content is compressed; decompress before searching
             searchable = _decompress_pdf_content(pdf_data)
-            assert b"Test Corp" in searchable
+            assert "Test Corp" in searchable
 
     def test_pdf_content_includes_total(self):
         """PDF content includes the total amount."""
@@ -489,7 +487,7 @@ class TestPDFExport:
             # Total should be 500.00 (5h * 100/hr)
             # PDF content is compressed; decompress before searching
             searchable = _decompress_pdf_content(pdf_data)
-            assert b"500.00" in searchable
+            assert "500.00" in searchable
 
 
 class TestIntegrationWorkflows:
