@@ -106,6 +106,46 @@ async def list_clients(session: Session = Depends(get_session)):
     return clients
 
 
+@app.delete("/api/clients/{client_id}", response_model=dict)
+async def delete_client(
+    client_id: int,
+    session: Session = Depends(get_session),
+):
+    """Deletes a client and all associated time logs.
+
+    Returns 404 if the client doesn't exist.
+    Returns 409 if the client has any time logs (billed or unbilled) —
+    remove logs or generate an invoice first.
+    """
+    client = session.get(Client, client_id)
+    if not client:
+        logger.warning("Client not found for deletion: id=%s", client_id)
+        raise HTTPException(status_code=404, detail="Client not found.")
+
+    # Prevent deletion if the client has any time logs
+    log_count = session.exec(
+        select(TimeLog).where(TimeLog.client_id == client_id)
+    ).all()
+    if log_count:
+        logger.info(
+            "Cannot delete client %s: %d time log(s) exist",
+            client_id, len(log_count),
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Client '{client.name}' has {len(log_count)} time log(s). "
+                "Remove or invoice these logs before deleting the client."
+            ),
+        )
+
+    # Delete the client (SQLModel cascade removes related records)
+    session.delete(client)
+    session.commit()
+    logger.info("Client deleted: id=%s name=%s", client_id, client.name)
+    return {"message": f"Client '{client.name}' deleted successfully."}
+
+
 @app.get("/api/clients/html", response_class=HTMLResponse)
 async def list_clients_html(session: Session = Depends(get_session)):
     """Returns an HTML list of clients (used by HTMX for the clients container).
@@ -125,6 +165,19 @@ async def list_clients_html(session: Session = Depends(get_session)):
             <td class="py-2 pr-4">{c.name}</td>
             <td class="py-2 pr-4">{c.email}</td>
             <td class="py-2 pr-4">{c.default_hourly_rate}</td>
+            <td class="py-2 text-right">
+                <button
+                    hx-delete="/api/clients/{c.id}"
+                    hx-confirm="Are you sure you want to delete {c.name}?"
+                    hx-target="#clients-container"
+                    class="text-red-400 hover:text-red-300 transition-colors"
+                    title="Delete client"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </td>
         </tr>"""
 
     html = f"""<table class="w-full text-sm text-left">
