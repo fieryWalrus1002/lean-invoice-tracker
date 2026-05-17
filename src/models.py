@@ -74,6 +74,23 @@ class TimeLog(SQLModel, table=True):
     invoice: Optional["Invoice"] = Relationship(back_populates="time_logs")
 
 
+class InvoiceSequence(SQLModel, table=True):
+    """Atomic sequence counter for invoice numbers.
+
+    Stores the next sequence number per year to ensure unique, collision-free
+    invoice numbering even under concurrent access.
+
+    Attributes:
+        year: The year this sequence applies to (e.g. 2026).
+        next_number: The next available sequence number (starts at 1).
+    """
+
+    __tablename__ = "invoice_sequence"
+
+    year: int = Field(primary_key=True, index=True)
+    next_number: int = Field(default=1)
+
+
 class Invoice(SQLModel, table=True):
     """An invoice aggregating unbilled time logs for a client.
 

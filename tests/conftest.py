@@ -18,7 +18,7 @@ from sqlmodel import Session, SQLModel
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.models import Client, Invoice, TimeLog  # noqa: E402
+from src.models import Client, Invoice, InvoiceSequence, TimeLog  # noqa: E402
 
 
 # ── Test database engine (in-memory, WAL mode) ──────────────────────────────
@@ -57,9 +57,10 @@ def test_engine():
 def session(test_engine):
     """
     Per-test database session with a fresh in-memory database.
-    Creates tables before each test and drops them after.
+    Drops and recreates all tables before each test to ensure clean state.
     Uses a regular SQLAlchemy Session (which has .exec() via SQLModel).
     """
+    SQLModel.metadata.drop_all(test_engine)
     SQLModel.metadata.create_all(test_engine)
     # Use Session (SQLAlchemy) which supports .exec() through SQLModel patching
     sess = Session(test_engine)
@@ -67,7 +68,6 @@ def session(test_engine):
         yield sess
     finally:
         sess.close()
-    SQLModel.metadata.drop_all(test_engine)
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
