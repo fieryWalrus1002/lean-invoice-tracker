@@ -124,13 +124,29 @@
 
                 const deleteMsg = document.getElementById("delete-message");
                 if (detail.successful) {
-                    // Success: show message and refresh clients
+                    // Success: show message and refresh clients table + dropdowns
                     if (deleteMsg) {
                         deleteMsg.innerHTML = `<p class="text-green-400 text-sm">✓ Client deleted successfully.</p>`;
                         setTimeout(() => { deleteMsg.innerHTML = ""; }, 3000);
                     }
-                    // Refresh the clients table
-                    htmx.trigger(document.body, "loadClients");
+                    // Refresh the clients table (the HTML table)
+                    fetch("/api/clients/html")
+                        .then(res => res.text())
+                        .then(html => {
+                            document.getElementById("clients-container").innerHTML = html;
+                        });
+                    // Refresh the client dropdowns
+                    fetch("/api/clients")
+                        .then(res => res.json())
+                        .then(clients => {
+                            const options = '<option value="">Select Client</option>' +
+                                clients.map(c =>
+                                    `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
+                                ).join("");
+                            document.querySelectorAll("select[name='client_id']").forEach(sel => {
+                                sel.innerHTML = options;
+                            });
+                        });
                 } else {
                     // Error: show error message
                     let msg = "Unknown error.";
