@@ -144,8 +144,8 @@ def compile_invoice_pdf(invoice: Invoice, session: Session) -> bytes:
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LINEBELOW", (0, 0), (-1, 0), 1, HexColor("#cccccc")),
         ("BACKGROUND", (0, -1), (-1, -1), HexColor("#f0f0f0")),
-        ("TOPPADDING", (0, 0), (-1, -1), (5,)),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), (5,)),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
     elements.append(table)
 
