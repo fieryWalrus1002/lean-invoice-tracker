@@ -109,11 +109,10 @@ sudo ssh -T git@github.com   # verify connectivity
 
 ## Production Hardening Checklist
 
-- [ ] **Invoice race condition** — For high-concurrency scenarios, consider a
-      database-level sequence table or retry logic (see `services.py`)
-- [ ] **Input validation** — Hours must be positive; dates cannot be in the future
-      (enforced via Pydantic validators)
-- [ ] **Structured logging** — All modules now emit structured logs at INFO level
+- [x] **Invoice race condition** — Resolved with atomic sequence table (InvoiceSequence)
+- [x] **Input validation** — Hours must be positive; dates cannot be in the future
+      (enforced via Pydantic validators on TimeLogCreate)
+- [x] **Structured logging** — All modules emit structured logs at INFO level
 - [ ] **Environment variables** — Set `DATABASE_URL` if deploying to a custom path
 - [ ] **Resource limits** — Configure Docker memory/CPU limits in docker-compose.yml
 - [ ] **Health checks** — Add a `/health` endpoint for container orchestrators
@@ -135,24 +134,26 @@ If you see `database is locked` errors:
 ### PDF generation fails
 
 ```
-RuntimeError: reportlab is required for PDF generation
+RuntimeError: weasyprint is required for PDF generation
 ```
 
-Install ReportLab:
+Install WeasyPrint:
 
 ```bash
-uv pip install reportlab
+uv pip install weasyprint
 # or
-pip install reportlab
+pip install weasyprint
 ```
 
-For Docker builds, ensure `libpango` is installed (already in the Dockerfile):
+For Docker builds, fonts are already included in the Dockerfile:
 
 ```dockerfile
 RUN apt-get update && apt-get install -y --no-install-recommends \
     sqlite3 \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
+    fonts-liberation \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 ```
 
