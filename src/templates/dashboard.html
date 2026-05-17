@@ -24,9 +24,10 @@
         <!-- Time Log Input Form Component -->
         <section class="bg-gray-800 p-6 rounded border border-gray-700">
             <h2 class="text-lg font-bold mb-4">Log Daily Operations</h2>
-            <form hx-post="/api/logs"
+            <form id="log-form"
+                  hx-post="/api/logs"
                   hx-target="#unbilled-table-container"
-                  hx-on::after-request="if(event.detail.successful) this.reset()"
+                  hx-on::after-request="if(event.detail.successful) { this.reset(); htmx.trigger(document.body, 'refreshUnbilled'); }"
                   class="grid grid-cols-5 gap-4">
                 <select name="client_id" id="client-select" required
                         class="bg-gray-900 border border-gray-700 p-2 rounded">
@@ -177,6 +178,15 @@
                     document.querySelectorAll("select[name='client_id']").forEach(sel => {
                         sel.innerHTML = options;
                     });
+                });
+        });
+
+        // Listen for refreshUnbilled trigger to reload the unbilled logs table
+        document.addEventListener("refreshUnbilled", function() {
+            fetch("/api/logs/unbilled")
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById("unbilled-table-container").innerHTML = html;
                 });
         });
 
