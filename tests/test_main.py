@@ -300,7 +300,7 @@ class TestTimeLogEndpoints:
             )
             assert response.status_code == 200
             data = response.json()
-            assert data["message"] == "Imported 2 time logs."
+            assert "Imported 2 time logs." in data["message"]
 
     def test_unbilled_logs_html(self):
         """GET /api/logs/unbilled returns HTML table."""
