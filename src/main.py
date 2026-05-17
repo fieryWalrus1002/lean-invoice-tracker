@@ -67,8 +67,20 @@ async def create_client(client: ClientCreate, session: Session = Depends(get_ses
 
     Expects a JSON body with ``name``, ``email``, ``billing_address``,
     and optionally ``default_hourly_rate`` (defaults to 0.00).
+
+    If a client with the same name already exists, returns the existing
+    client instead of creating a duplicate.
     """
     logger.info("Creating client: %s", client.name)
+
+    # Check for existing client with the same name
+    existing = session.exec(
+        select(Client).where(Client.name == client.name)
+    ).first()
+    if existing:
+        logger.info("Client already exists: name=%s id=%s", client.name, existing.id)
+        return existing
+
     db_client = Client(
         name=client.name,
         email=client.email,
@@ -84,16 +96,23 @@ async def create_client(client: ClientCreate, session: Session = Depends(get_ses
 
 @app.get("/api/clients", response_model=list[ClientResponse])
 async def list_clients(session: Session = Depends(get_session)):
-    """Lists all active client profiles."""
-    clients = session.exec(select(Client)).all()
+    """Lists all active client profiles.
+
+    Results are deduplicated by name to prevent duplicate entries
+    from appearing in dropdown lists.
+    """
+    clients = session.exec(select(Client).distinct()).all()
     logger.debug("Listed %d clients", len(clients))
     return clients
 
 
 @app.get("/api/clients/html", response_class=HTMLResponse)
 async def list_clients_html(session: Session = Depends(get_session)):
-    """Returns an HTML list of clients (used by HTMX for the clients container)."""
-    clients = session.exec(select(Client)).all()
+    """Returns an HTML list of clients (used by HTMX for the clients container).
+
+    Results are deduplicated by name to prevent duplicate entries.
+    """
+    clients = session.exec(select(Client).distinct()).all()
 
     if not clients:
         return HTMLResponse(

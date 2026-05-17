@@ -26,7 +26,7 @@ class Client(SQLModel, table=True):
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True)
+    name: str = Field(index=True, unique=True)
     email: str
     billing_address: str
     default_hourly_rate: Decimal = Field(default=0.00, decimal_places=2)

@@ -6,6 +6,7 @@ Uses a test database file to avoid polluting the production database.
 
 import datetime
 import io
+import os
 import re
 import sys
 import zlib
@@ -40,6 +41,12 @@ def _decompress_pdf_content(pdf_bytes):
 
 TEST_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "test_invoices.db"
 TEST_DB_URL = f"sqlite:///{TEST_DB_PATH}"
+
+# Fallback to temp dir if data/ is not writable (permission issues)
+if not TEST_DB_PATH.parent.exists() or not os.access(TEST_DB_PATH.parent, os.W_OK):
+    import tempfile
+    TEST_DB_PATH = Path(tempfile.mkdtemp()) / "test_invoices.db"
+    TEST_DB_URL = f"sqlite:///{TEST_DB_PATH}"
 
 
 def _get_test_session_generator():
@@ -177,8 +184,16 @@ class TestClientEndpoints:
     def test_list_clients(self):
         """GET /api/clients returns all clients."""
         with TestClient(app) as client:
-            _create_client(client)
-            _create_client(client)
+            resp1 = client.post("/api/clients", json={
+                "name": "Client Alpha", "email": "a@test.com",
+                "billing_address": "123 A St", "default_hourly_rate": 100.00,
+            })
+            resp2 = client.post("/api/clients", json={
+                "name": "Client Beta", "email": "b@test.com",
+                "billing_address": "456 B St", "default_hourly_rate": 120.00,
+            })
+            assert resp1.status_code == 200
+            assert resp2.status_code == 200
             response = client.get("/api/clients")
             assert response.status_code == 200
             data = response.json()
@@ -190,6 +205,40 @@ class TestClientEndpoints:
             response = client.get("/api/clients")
             assert response.status_code == 200
             assert response.json() == []
+
+    def test_create_client_returns_existing_on_duplicate_name(self):
+        """POST /api/clients returns existing client when name already exists."""
+        with TestClient(app) as client:
+            resp1 = _create_client(client)
+            cid1 = resp1.json()["id"]
+
+            # Try creating same name again
+            resp2 = _create_client(client)
+            assert resp2.status_code == 200
+            assert resp2.json()["id"] == cid1
+
+    def test_list_clients_no_duplicates(self):
+        """GET /api/clients returns unique clients even after duplicate POSTs."""
+        with TestClient(app) as client:
+            _create_client(client)
+            _create_client(client)
+            _create_client(client)
+            response = client.get("/api/clients")
+            assert response.status_code == 200
+            data = response.json()
+            # Should only have 1 client despite 3 POSTs
+            assert len(data) == 1
+            assert data[0]["name"] == "Test Corp"
+
+    def test_list_clients_html_no_duplicates(self):
+        """GET /api/clients/html returns unique clients."""
+        with TestClient(app) as client:
+            _create_client(client)
+            _create_client(client)
+            response = client.get("/api/clients/html")
+            assert response.status_code == 200
+            # Should only contain one "Test Corp" row
+            assert response.text.count("Test Corp") == 1
 
 
 class TestTimeLogEndpoints:
@@ -324,8 +373,14 @@ class TestTimeLogEndpoints:
     def test_unbilled_logs_filter_by_client(self):
         """GET /api/logs/unbilled?client_id=N filters results."""
         with TestClient(app) as client:
-            resp1 = _create_client(client)
-            resp2 = _create_client(client)
+            resp1 = client.post("/api/clients", json={
+                "name": "Filter Client 1", "email": "f1@test.com",
+                "billing_address": "123 F1 St", "default_hourly_rate": 100.00,
+            })
+            resp2 = client.post("/api/clients", json={
+                "name": "Filter Client 2", "email": "f2@test.com",
+                "billing_address": "456 F2 St", "default_hourly_rate": 100.00,
+            })
             cid1 = resp1.json()["id"]
             cid2 = resp2.json()["id"]
 

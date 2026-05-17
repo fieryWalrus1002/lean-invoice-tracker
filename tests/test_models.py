@@ -169,6 +169,23 @@ class TestModelConstraints:
         with pytest.raises(IntegrityError):
             session.commit()
 
+    def test_client_name_uniqueness(self, session):
+        """Duplicate client name raises IntegrityError."""
+        c1 = Client(
+            name="Unique Client", email="u@test.com",
+            billing_address="Addr", default_hourly_rate=50.00,
+        )
+        session.add(c1)
+        session.commit()
+
+        c2 = Client(
+            name="Unique Client", email="other@test.com",
+            billing_address="Other Addr", default_hourly_rate=75.00,
+        )
+        session.add(c2)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
     def test_timelog_requires_client_id(self, session):
         """TimeLog cannot be created without a valid client_id."""
         c = Client(

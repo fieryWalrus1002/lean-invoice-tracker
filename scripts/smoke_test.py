@@ -39,7 +39,7 @@ class SmokeTest:
         assert "html" in r.text.lower(), "Response doesn't contain HTML"
 
     def test_create_client(self):
-        """Test client creation."""
+        """Test client creation (deduplicated — reuses existing if present)."""
         payload = {
             "name": "Test Client",
             "email": "test@example.com",
@@ -51,6 +51,11 @@ class SmokeTest:
         data = r.json()
         assert data["id"], "No ID in response"
         self.client_id = data["id"]
+        # Verify no duplicate was created
+        r2 = requests.get(f"{BASE_URL}/api/clients", timeout=TIMEOUT)
+        clients = r2.json()
+        test_clients = [c for c in clients if c["name"] == "Test Client"]
+        assert len(test_clients) == 1, f"Expected 1 'Test Client', found {len(test_clients)}"
 
     def test_list_clients(self):
         """Test listing clients."""
