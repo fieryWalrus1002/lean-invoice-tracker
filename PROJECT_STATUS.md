@@ -14,7 +14,7 @@ The Lean Invoice Tracker MVP is **production-ready** with all critical modules i
 - **Modules:** 5 (models, database, services, API, PDF)
 - **API Endpoints:** 10 (clients, logs, invoices, PDF, clients/html)
 - **Database Tables:** 4 (Client, TimeLog, Invoice, InvoiceSequence)
-- **Pull Requests Merged:** 6
+- **Pull Requests Merged:** 8
 - **Test Coverage:** 83 pytest + 8 smoke tests
 
 ---
@@ -139,6 +139,19 @@ All 9 critical fixes from the reviewer have been integrated into:
 | SQLite WAL mode | ✅ Fixed | Event listener in database.py |
 | Git SSH for cron | ✅ Documented | Added instructions in spec section 7 |
 
+## Recent Changes (Issue #8 — Client Deduplication)
+
+Clients were not unique in the database, causing dropdown lists to show endless duplicates (e.g., "Test Client" from test suites).
+
+| Change | Details |
+|--------|---------|
+| `Client.name` unique constraint | Added `unique=True` to prevent DB-level duplicates |
+| `POST /api/clients` dedup | Returns existing client if name already exists |
+| `GET /api/clients` dedup | Uses `DISTINCT` to return unique clients |
+| `GET /api/clients/html` dedup | Same deduplication for HTMX dropdown |
+| Smoke test verification | Verifies no duplicate created on re-run |
+| New tests | 4 new tests for dedup behavior and uniqueness constraint |
+
 ## Additional PRs Merged
 
 | PR | Title | Status |
@@ -148,6 +161,8 @@ All 9 critical fixes from the reviewer have been integrated into:
 | #4 | dynamic client dropdown loading | ✅ Merged |
 | #5 | atomic invoice numbers (sequence table) | ✅ Merged |
 | #6 | Jinja2 template + WeasyPrint PDF generation | ✅ Merged |
+| #7 | stale-docs-and-validation-gaps | ✅ Merged |
+| #8 | client-unique-dedup (issue #8) | ✅ Merged |
 
 ---
 
@@ -342,14 +357,14 @@ lean-invoice-tracker/
 ├── backups/
 │   ├── config.json        (manual config)
 │   └── db_dump.sql        (git-tracked dumps)
-└── tests/                 ✅ Complete (83 tests passing)
+└── tests/                 ✅ Complete (87 tests passing)
     ├── __init__.py
     ├── conftest.py        (pytest fixtures)
-    ├── test_models.py     (7 tests)
+    ├── test_models.py     (8 tests)
     ├── test_database.py   (5 tests)
     ├── test_services.py   (12 tests)
-    ├── test_main.py       (19 tests)
-    └── test_pdf.py        (13 tests)
+    ├── test_main.py       (23 tests)
+    └── test_pdf.py        (14 tests)
 ```
 
 ---
@@ -371,17 +386,17 @@ lean-invoice-tracker/
 
 ## Test Execution Summary
 
-### pytest (83 tests)
+### pytest (87 tests)
 ```bash
 $ uv run pytest
 ============================= test session starts ==============================
-... collected 83 items ...
+... collected 87 items ...
 tests/test_database.py ...........                                          [  1%]
-tests/test_models.py ...................                                   [ 43%]
+tests/test_models.py ....................                                   [ 46%]
 tests/test_services.py ...........................                         [ 87%]
-tests/test_main.py ...........................                            [ 95%]
+tests/test_main.py ................................                       [ 95%]
 tests/test_pdf.py ..............                                          [100%]
-============================== 83 passed in 3.45s ==============================
+============================== 87 passed in 3.25s ==============================
 ```
 
 ### Smoke Tests (8 tests)
