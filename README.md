@@ -12,7 +12,7 @@ FastAPI application.
 - **CSV bulk import** — Upload CSV files with client\_id, date, hours, description
 - **Invoice generation** — Aggregate unbilled logs into numbered invoices
 - **PDF export** — Download professional invoices as PDF (Jinja2 template + WeasyPrint)
-- **HTMX-powered UI** — Fast, reactive dashboard with dynamic dropdowns, live table updates, and confirmation dialogs (no JavaScript frameworks)
+- **HTMX-powered UI** — Fast, reactive dashboard without JavaScript frameworks
 - **SQLite + WAL** — Safe concurrent access and clean backups
 - **Docker-ready** — One-command deployment with docker-compose
 

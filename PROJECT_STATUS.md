@@ -194,42 +194,6 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 | WAL mode on test engine | Mirrors production WAL configuration |
 | No filesystem dependency | Test no longer depends on production DB permissions |
 
-## Recent Changes (Issue #13 — Form Date Field Not Submitted)
-
-The time log form had a date input named `date`, but the endpoint parameter was
-named `date_str`. This mismatch meant form submissions never sent the selected
-value — every entry defaulted to today's date.
-
-| Change | Details |
-|--------|----------|
-| Endpoint parameter renamed | `date_str` → `date` in `POST /api/logs` |
-| HTML date input constraints | Added `min`/`max` attributes to prevent impossible dates |
-| Hours input constraint | Added `max="24"` to prevent >24h entries |
-| `today` passed to template | Dashboard route now passes `today` ISO date for `max` attribute |
-
-## Recent Changes (HTMX UI Fixes)
-
-### Fix: Clients table refresh after delete
-The delete handler was only refreshing the client dropdowns, not the clients table.
-HTMX couldn't swap the JSON delete response into the HTML container, leaving stale data.
-
-| Change | Details |
-|--------|----------|
-| Explicit HTML fetch | After delete success, fetches `/api/clients/html` and swaps into `#clients-container` |
-| Dropdown refresh | Also fetches `/api/clients` JSON and updates all `<select>` dropdowns |
-| No page reload | Table and dropdowns update instantly |
-
-### Fix: Unbilled logs auto-refresh after log submission
-The time log form was resetting but not refreshing the unbilled logs table.
-Users had to reload the page to see their newly submitted entry.
-
-| Change | Details |
-|--------|----------|
-| Form ID added | `id="log-form"` on the time log form for reliable event targeting |
-| Auto-refresh trigger | `hx-on::after-request` now triggers `refreshUnbilled` event on success |
-| New event listener | Listens for `refreshUnbilled`, fetches `/api/logs/unbilled` HTML, swaps into container |
-| Table updates instantly | Unbilled table and dropdowns both refresh after log submission |
-
 ---
 
 ## Testing Status
@@ -294,7 +258,6 @@ Users had to reload the page to see their newly submitted entry.
 ### Important (Should Fix Before Prod)
 - [x] **Invoice race condition** — Resolved with atomic sequence table ✅
 - [x] **Form client_id dropdown** — Now dynamically loaded via HTMX ✅
-- [x] **Form date field not submitted** — Form field named `date` but endpoint parameter was `date_str`, causing all submissions to use today's date ✅
 - [ ] **Error handling in CSV upload** — Silently skips malformed rows (should log warnings)
 - [x] **No input validation** — Hours must be positive, date cannot be in the future ✅
 

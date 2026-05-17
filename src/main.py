@@ -56,9 +56,7 @@ logger.info("Database tables created / verified")
 async def dashboard(request: Request):
     """Renders the front-end dashboard UI template."""
     logger.debug("Dashboard request received")
-    return templates.TemplateResponse(
-        request, "dashboard.html", context={"today": _date.today().isoformat()},
-    )
+    return templates.TemplateResponse(request, "dashboard.html")
 
 
 # ── API: Clients ─────────────────────────────────────────────────────────────
@@ -203,7 +201,7 @@ async def create_time_log(
     client_id: Optional[int] = Form(None),
     hours: Optional[float] = Form(None),
     description: Optional[str] = Form(None),
-    date: Optional[str] = Form(None),
+    date_str: Optional[str] = Form(None),
     session: Session = Depends(get_session),
 ):
     """Records a manual time-tracking entry. Accepts JSON (CLI) or form data (HTMX).
@@ -224,7 +222,7 @@ async def create_time_log(
     form_data = client_id is not None and hours is not None and description is not None
 
     if form_data:
-        log_date = _date.fromisoformat(date) if date else None
+        log_date = _date.fromisoformat(date_str) if date_str else None
         create_data = TimeLogCreate(
             client_id=client_id,
             hours=hours,
