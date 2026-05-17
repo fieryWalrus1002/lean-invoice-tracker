@@ -4,7 +4,7 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, Header, Query, Request, UploadFile, File, Body
+from fastapi import Depends, FastAPI, Form, Header, Query, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -62,38 +62,30 @@ async def dashboard(request: Request):
 # ── API: Clients ─────────────────────────────────────────────────────────────
 
 @app.post("/api/clients", response_model=ClientResponse)
-async def create_client(
-    name: str = Form(...),
-    email: str = Form(...),
-    billing_address: str = Form(""),
-    default_hourly_rate: float = Form(0.00),
-    session: Session = Depends(get_session),
-):
+async def create_client(client: ClientCreate, session: Session = Depends(get_session)):
     """Creates a new tracking client profile.
 
-    Accepts either form-encoded data (HTMX) or JSON body (CLI).
-
-    Form fields: ``name``, ``email``, ``billing_address``, ``default_hourly_rate``.
-    JSON body: {"name": "...", "email": "...", "billing_address": "...", "default_hourly_rate": 0.00}
+    Expects a JSON body with ``name``, ``email``, ``billing_address``,
+    and optionally ``default_hourly_rate`` (defaults to 0.00).
 
     If a client with the same name already exists, returns the existing
     client instead of creating a duplicate.
     """
-    logger.info("Creating client: %s", name)
+    logger.info("Creating client: %s", client.name)
 
     # Check for existing client with the same name
     existing = session.exec(
-        select(Client).where(Client.name == name)
+        select(Client).where(Client.name == client.name)
     ).first()
     if existing:
-        logger.info("Client already exists: name=%s id=%s", name, existing.id)
+        logger.info("Client already exists: name=%s id=%s", client.name, existing.id)
         return existing
 
     db_client = Client(
-        name=name,
-        email=email,
-        billing_address=billing_address,
-        default_hourly_rate=default_hourly_rate,
+        name=client.name,
+        email=client.email,
+        billing_address=client.billing_address,
+        default_hourly_rate=client.default_hourly_rate,
     )
     session.add(db_client)
     session.commit()
@@ -275,6 +267,34 @@ async def create_time_log(
     return db_log
 
 
+@app.delete("/api/logs/{log_id}", response_model=dict)
+async def delete_time_log(
+    log_id: int,
+    session: Session = Depends(get_session),
+):
+    """Deletes a single time log entry.
+
+    Returns 404 if the log doesn't exist.
+    Returns 409 if the log is already billed (part of an invoice).
+    """
+    log = session.get(TimeLog, log_id)
+    if not log:
+        logger.warning("Time log not found for deletion: id=%s", log_id)
+        raise HTTPException(status_code=404, detail="Time log not found.")
+
+    if log.is_billed:
+        logger.warning("Cannot delete billed time log: id=%s", log_id)
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete time log that is already billed.",
+        )
+
+    session.delete(log)
+    session.commit()
+    logger.info("Time log deleted: id=%s client_id=%s", log_id, log.client_id)
+    return {"message": "Time log deleted successfully", "id": log_id}
+
+
 @app.post("/api/logs/upload-csv")
 async def upload_csv(
     file: UploadFile = File(...),
@@ -361,6 +381,15 @@ async def unbilled_logs_html(
             <td class="py-2 pr-4">{log.description}</td>
             <td class="py-2">
                 <span class="px-2 py-1 text-xs rounded bg-yellow-900 text-yellow-300">Unbilled</span>
+            </td>
+            <td class="py-2">
+                <button
+                    hx-delete="/api/logs/{log.id}"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) {{ fetch('/api/logs/unbilled').then(r => r.text()).then(h => document.getElementById('unbilled-table-container').innerHTML = h); }}"
+                    hx-confirm="Delete this time log?"
+                    class="text-red-400 hover:text-red-300 text-xs font-bold"
+                >✗</button>
             </td>
         </tr>"""
 

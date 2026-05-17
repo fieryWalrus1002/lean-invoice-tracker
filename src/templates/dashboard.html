@@ -93,10 +93,7 @@
         <section class="bg-gray-800 p-6 rounded border border-gray-700">
             <h2 class="text-lg font-bold mb-4">Generate Invoice</h2>
             <form id="invoice-form"
-                  hx-post="/api/clients/0/invoices"
-                  hx-swap="none"
-                  hx-on::before-request="updateInvoiceAction()"
-                  hx-on::after-request="handleInvoiceFormResponse(event)"
+                  hx-on::submit="return handleInvoiceSubmit(event)"
                   class="grid grid-cols-3 gap-4">
                 <select name="client_id" id="invoice-client-select" required
                         class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -152,27 +149,52 @@
         }
 
         // --- Invoice Form ---
-        // Update the hx-post URL right before the request fires (no race condition)
-        function updateInvoiceAction() {
+        function handleInvoiceSubmit(event) {
             const select = document.getElementById('invoice-client-select');
-            const form = document.getElementById('invoice-form');
-            if (select && form) {
-                const clientId = select.value;
-                if (clientId) {
-                    form.setAttribute('hx-post', '/api/clients/' + clientId + '/invoices');
-                }
+            const clientId = select.value;
+            if (!clientId) {
+                showMessage('invoice-message', '✗ Please select a client.', true);
+                event.preventDefault();
+                return false;
             }
-        }
-        function handleInvoiceFormResponse(event) {
-            if (event.detail.successful) {
+            event.preventDefault();
+
+            // Create invoice, then download PDF using Blob API
+            fetch('/api/clients/' + clientId + '/invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(r => {
+                if (!r.ok) throw new Error('Failed');
+                return r.json();
+            })
+            .then(data => {
                 showMessage('invoice-message', '✓ Invoice generated successfully.', false);
+                // Download PDF via Blob
+                return fetch('/api/invoices/' + data.id + '/pdf')
+                    .then(r => r.blob())
+                    .then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = data.invoice_number + '.pdf';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    });
+            })
+            .then(() => {
+                // Refresh tables in background
                 fetch('/api/logs/unbilled')
                     .then(r => r.text())
                     .then(h => document.getElementById('unbilled-table-container').innerHTML = h);
                 refreshClientDropdowns();
-            } else {
-                showMessage('invoice-message', '✗ ' + parseErrorMessage(event.detail.xhr.responseText), true);
-            }
+            })
+            .catch(() => {
+                showMessage('invoice-message', '✗ Failed to generate invoice.', true);
+            });
+            return false;
         }
 
         // Handle HTMX delete response
