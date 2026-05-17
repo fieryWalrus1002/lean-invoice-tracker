@@ -13,40 +13,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.models import Client, Invoice, TimeLog  # noqa: E402
-from src.utils.pdf import compile_invoice_pdf, HAS_REPORTLAB  # noqa: E402
+from src.utils.pdf import compile_invoice_pdf, HAS_WEASYPRINT  # noqa: E402
 
 
 def _extract_pdf_text(pdf_bytes):
-    """Decompress PDF streams and extract searchable text content.
-
-    ReportLab uses a double encoding: ASCII85Decode → FlateDecode.
-    """
-    from reportlab.lib.rl_accel import asciiBase85Decode
-
-    # Find all content streams (between "stream\n" and "~>endstream")
-    # ReportLab encodes as ASCII85 (with ~> terminator) then FlateDecode
+    """Extract readable text from PDF bytes using pypdf."""
+    from pypdf import PdfReader
+    import io
+    reader = PdfReader(io.BytesIO(pdf_bytes))
     text_parts = []
-    for match in re.finditer(rb'stream\n(.*?)~>', pdf_bytes, re.DOTALL):
-        stream_data = match.group(1)
-        # ReportLab encodes as ASCII85 first, then FlateDecode
-        try:
-            # asciiBase85Decode requires the ~> terminator
-            decoded = asciiBase85Decode(stream_data + b'~>')
-            decompressed = zlib.decompress(decoded)
-            text_parts.append(decompressed)
-        except zlib.error:
-            # Not compressed, try ASCII85 decode only
-            try:
-                text_parts.append(asciiBase85Decode(stream_data + b'~>'))
-            except Exception:
-                text_parts.append(stream_data)
-        except Exception:
-            # Not ASCII85 compressed, try raw zlib
-            try:
-                decompressed = zlib.decompress(stream_data)
-                text_parts.append(decompressed)
-            except zlib.error:
-                text_parts.append(stream_data)
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        text_parts.append(text.encode("utf-8", errors="replace"))
     return b"".join(text_parts)
 
 
@@ -251,13 +229,13 @@ class TestPDFWithLargeData:
 
 
 class TestPDFMissingDependency:
-    """Test graceful handling when ReportLab is not available."""
+    """Test graceful handling when WeasyPrint is not available."""
 
-    def test_reportlab_missing_raises_runtime_error(self):
-        """compile_invoice_pdf raises RuntimeError when ReportLab not installed."""
-        # This test is only valid if HAS_REPORTLAB is True (which it should be)
+    def test_weasyprint_missing_raises_runtime_error(self):
+        """compile_invoice_pdf raises RuntimeError when WeasyPrint not installed."""
+        # This test is only valid if HAS_WEASYPRINT is True (which it should be)
         # In that case, we test that the function works normally
-        # For the missing case, we'd need to mock HAS_REPORTLAB = False
+        # For the missing case, we'd need to mock HAS_WEASYPRINT = False
         # which is hard without patching the module.
-        # Instead, verify ReportLab IS available in this test environment.
-        assert HAS_REPORTLAB is True, "ReportLab should be installed for PDF tests"
+        # Instead, verify WeasyPrint IS available in this test environment.
+        assert HAS_WEASYPRINT is True, "WeasyPrint should be installed for PDF tests"
