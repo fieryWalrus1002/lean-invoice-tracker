@@ -5,7 +5,7 @@
 ### Current State
 - **Branch:** All work merged to `main`
 - **Tests:** 94 pytest + 8 smoke tests — all passing
-- **PRs:** 12 merged (#1–#12)
+- **PRs:** 13 merged (#1–#13)
 - **Status:** 🟢 Production-ready, feature-complete
 
 ### What's Done
@@ -13,8 +13,8 @@
 | Area | Status |
 |------|--------|
 | Core implementation | ✅ All 5 modules complete |
-| API endpoints | ✅ 10 endpoints working |
-| UI | ✅ HTMX dashboard with dynamic dropdowns |
+| API endpoints | ✅ 11 endpoints working (including DELETE /api/clients/{id}) |
+| UI | ✅ HTMX dashboard with dynamic dropdowns, live table updates, confirmation dialogs |
 | PDF generation | ✅ Jinja2 template + WeasyPrint |
 | Test suite | ✅ 94 pytest + 8 smoke tests |
 | Production hardening | ✅ Validation, logging, atomic invoices |
@@ -69,9 +69,15 @@ docker compose up --build -d
 
 - **Invoice numbering:** Atomic sequence table (`InvoiceSequence`) prevents collisions
 - **PDF rendering:** `invoice.html` template rendered via Jinja2, converted to PDF via WeasyPrint
-- **HTMX:** Dashboard uses HTMX for dynamic client dropdowns and live updates
+- **HTMX:** Dashboard uses HTMX for dynamic client dropdowns, live table updates, and confirmation dialogs
 - **Database:** SQLite with WAL mode, sequence table for atomic counters
 - **Validation:** Pydantic validators on `TimeLogCreate` (hours > 0, date ≤ today)
+
+### Recent Fixes
+
+- **Form date field** (PR #13): Form field named `date` but endpoint parameter was `date_str`, causing all submissions to default to today's date. Fixed by renaming parameter and adding HTML date/hours constraints.
+- **Clients table refresh** (PR #11): Delete button only refreshed dropdowns, not the table. Fixed to refresh both.
+- **Unbilled logs auto-refresh** (PR #11): Submitting a time log didn't update the unbilled table. Fixed with HTMX event trigger.
 
 ### Dependencies
 
@@ -85,7 +91,7 @@ docker compose up --build -d
 
 ### What to Do First
 
-1. **Run `uv run pytest`** — verify all 83 tests pass
+1. **Run `uv run pytest`** — verify all 94 tests pass
 2. **Run `uv run python scripts/smoke_test.py`** — verify live integration
 3. **Read `PROJECT_STATUS.md`** — full status and known issues
 4. **Read `specs/project.md`** — system design specification
