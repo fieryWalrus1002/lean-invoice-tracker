@@ -1,18 +1,49 @@
 """
 Tests for the database layer (WAL mode, table creation).
+
+Tests use an in-memory SQLite database to avoid depending on
+the production database file (which may have read-only permissions).
 """
 
+import datetime
 import sys
 from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
+from sqlmodel import Session as SqlModelSession, SQLModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.database import engine, create_db_and_tables, get_session  # noqa: E402
+from src.database import create_db_and_tables, engine, get_session  # noqa: E402
 from src.models import Client, Invoice, TimeLog  # noqa: E402
+
+
+# ── Test database engine (in-memory, WAL mode) ──────────────────────────────
+# Used by tests that need to write data, avoiding the production DB file.
+
+TEST_DATABASE_URL = "sqlite:///:memory:"
+
+
+def _create_test_engine():
+    """Create an in-memory SQLite engine with WAL mode."""
+    test_engine = create_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+    )
+
+    @event.listens_for(test_engine, "connect")
+    def set_wal_mode(dbapi_connection, connection_record):
+        """Set SQLite journal mode to WAL on every new connection."""
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.close()
+
+    return test_engine
+
+
+_test_engine = _create_test_engine()
 
 
 class TestWALMode:
@@ -79,11 +110,13 @@ class TestTableCreation:
 
     def test_invoice_number_has_unique_constraint(self):
         """Invoice.invoice_number has a unique constraint enforced at DB level."""
-        create_db_and_tables()
-        sess = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
+        # Use an in-memory test engine to avoid writing to the production DB
+        # which may have read-only permissions.
+        test_db_engine = _create_test_engine()
+        SQLModel.metadata.create_all(test_db_engine)
+        sm = SqlModelSession(test_db_engine)
         try:
-            from sqlmodel import Session as SqlModelSession
-            sm = SqlModelSession(engine)
+            today = datetime.date.today()
             sm.add(Client(
                 name="C1", email="c1@test.com",
                 billing_address="Addr1", default_hourly_rate=50.00,
@@ -91,7 +124,7 @@ class TestTableCreation:
             sm.commit()
             c1_id = sm.get(Client, 1).id
             sm.add(TimeLog(
-                date=__import__("datetime").date.today(),
+                date=today,
                 hours=1.0, description="test",
                 client_id=c1_id,
             ))
@@ -99,14 +132,14 @@ class TestTableCreation:
             t1_id = sm.get(TimeLog, 1).id
 
             inv1 = Invoice(invoice_number="INV-2025-0001",
-                           due_date=__import__("datetime").date.today(),
+                           due_date=today,
                            total_amount=100.00, client_id=c1_id)
             sm.add(inv1)
             sm.flush()
 
             with pytest.raises(Exception):  # IntegrityError / OperationalError
                 inv2 = Invoice(invoice_number="INV-2025-0001",
-                               due_date=__import__("datetime").date.today(),
+                               due_date=today,
                                total_amount=200.00, client_id=c1_id)
                 sm.add(inv2)
                 sm.commit()
