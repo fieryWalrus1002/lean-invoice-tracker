@@ -11,7 +11,7 @@ FastAPI application.
 - **Time tracking** — Log hours per client via web form or CLI
 - **CSV bulk import** — Upload CSV files with client\_id, date, hours, description
 - **Invoice generation** — Aggregate unbilled logs into numbered invoices
-- **PDF export** — Download professional invoices as PDF
+- **PDF export** — Download professional invoices as PDF (Jinja2 template + WeasyPrint)
 - **HTMX-powered UI** — Fast, reactive dashboard without JavaScript frameworks
 - **SQLite + WAL** — Safe concurrent access and clean backups
 - **Docker-ready** — One-command deployment with docker-compose
@@ -164,20 +164,29 @@ Invalid submissions return `422 Unprocessable Entity` with a detail message.
 lean-invoice-tracker/
 ├── src/
 │   ├── main.py            # FastAPI app & API routes
-│   ├── models.py          # SQLModel database schemas
+│   ├── models.py          # SQLModel database schemas + InvoiceSequence
 │   ├── database.py        # Engine + WAL configuration
 │   ├── services.py        # Business logic & schemas
-│   ├── templates/         # Jinja2 HTML templates
+│   ├── templates/
+│   │   ├── dashboard.html # HTMX-powered dashboard
+│   │   └── invoice.html   # PDF template (Jinja2 + WeasyPrint)
 │   └── utils/
-│       └── pdf.py         # PDF generation with ReportLab
+│       └── pdf.py         # PDF generation (Jinja2 + WeasyPrint)
 ├── data/
 │   └── invoices.db        # SQLite database (git-ignored)
 ├── backups/
 │   └── db_dump.sql        # Automated SQL dumps
 ├── tests/                 # 83 pytest tests
-├── requirements.txt
+├── scripts/
+│   ├── README.md          # Script documentation
+│   └── smoke_test.py      # Live integration tests
+├── specs/
+│   └── project.md         # System design specification
+├── requirements.txt       # Dependencies (includes weasyprint)
 ├── docker-compose.yml
-├── Dockerfile
+├── Dockerfile             # Includes WeasyPrint fonts
+├── DEPLOYMENT.md          # Production deployment guide
+├── PROJECT_STATUS.md      # Current project status
 └── run_backup.sh          # Automated backup script
 ```
 
@@ -185,11 +194,25 @@ lean-invoice-tracker/
 
 ## Testing
 
+### Unit Tests
+
 ```bash
 uv run pytest
 ```
 
 83 tests covering models, database, services, API endpoints, and PDF generation.
+
+### Smoke Tests
+
+```bash
+# 1. Start the server in one terminal
+uv run uvicorn src.main:app --port 8000
+
+# 2. Run smoke tests in another terminal
+uv run python scripts/smoke_test.py
+```
+
+8 live integration tests that verify the full workflow end-to-end.
 
 ---
 
