@@ -63,9 +63,8 @@
             <h2 class="text-lg font-bold mb-4">Clients</h2>
             <form id="add-client-form"
                   hx-post="/api/clients"
-                  hx-target="#clients-container"
-                  hx-swap="innerHTML"
-                  hx-on::after-request="if(event.detail.successful) this.reset()"
+                  hx-swap="none"
+                  hx-on::after-request="if(event.detail.successful){this.reset();fetch('/api/clients/html').then(r=>r.text()).then(h=>document.getElementById('clients-container').innerHTML=h);fetch('/api/clients').then(r=>r.json()).then(clients=>{const opts='<option value=\"\">Select Client</option>'+clients.map(c=>\`<option value=\"${c.id}\">${c.name} (${c.default_hourly_rate}/h)</option>\").join('');document.querySelectorAll(\"select[name='client_id']\").forEach(s=>s.innerHTML=opts);});}else{let msg='Unknown error.';try{msg=JSON.parse(event.detail.xhr.responseText).detail||msg;}catch(e){msg='Could not add client.';}const d=document.getElementById('delete-message');if(d){d.innerHTML=\`<p class=\"text-red-400 text-sm\">✗ \${msg}</p>\`;setTimeout(()=>{d.innerHTML='';},5000);}}"
                   class="grid grid-cols-5 gap-4 mb-6">
                 <input type="text" name="name" placeholder="Client name" required
                        class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -95,8 +94,8 @@
             <h2 class="text-lg font-bold mb-4">Generate Invoice</h2>
             <form id="invoice-form"
                   hx-post="/api/clients/0/invoices"
-                  hx-target="#unbilled-table-container"
-                  hx-swap="innerHTML"
+                  hx-swap="none"
+                  hx-on::after-request="if(event.detail.successful){const m=document.getElementById('delete-message');if(m){m.innerHTML='<p class=\"text-green-400 text-sm\">✓ Invoice generated successfully.</p>';setTimeout(()=>{m.innerHTML='';},3000);}fetch('/api/logs/unbilled').then(r=>r.text()).then(h=>document.getElementById('unbilled-table-container').innerHTML=h);fetch('/api/clients').then(r=>r.json()).then(clients=>{const opts='<option value=\"\">Select Client</option>'+clients.map(c=>\`<option value=\"${c.id}\">${c.name} (${c.default_hourly_rate}/h)</option>\").join('');document.querySelectorAll(\"select[name='client_id']\").forEach(s=>s.innerHTML=opts);});}else{let msg='Unknown error.';try{msg=JSON.parse(event.detail.xhr.responseText).detail||msg;}catch(e){msg='Could not generate invoice.';}const d=document.getElementById('delete-message');if(d){d.innerHTML=\`<p class=\"text-red-400 text-sm\">✗ \${msg}</p>\`;setTimeout(()=>{d.innerHTML='';},5000);}}"
                   class="grid grid-cols-3 gap-4">
                 <select name="client_id" id="invoice-client-select" required
                         class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -217,32 +216,10 @@
                                 invoiceForm.setAttribute("hx-post", "/api/clients/0/invoices");
                             }
                         });
-                        // Also handle HTMX swap after invoice generation
-                        invoiceForm.addEventListener("htmx:afterOnLoad", function() {
-                            // Refresh clients to update dropdowns
-                            htmx.trigger(document.body, "loadClients");
-                        });
-                    }
+                        }
                 });
         });
 
-        // Refresh clients after invoice generation
-        document.addEventListener("htmx:afterOnLoad", function(event) {
-            if (event.target.id === "invoice-form") {
-                fetch("/api/clients")
-                    .then(res => res.json())
-                    .then(clients => {
-                        const options = '<option value="">Select Client</option>' +
-                            clients.map(c =>
-                                `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
-                            ).join("");
-                        const invoiceSelect = document.getElementById("invoice-client-select");
-                        if (invoiceSelect) {
-                            invoiceSelect.innerHTML = options;
-                        }
-                    });
-            }
-        });
     </script>
 </body>
 </html>
