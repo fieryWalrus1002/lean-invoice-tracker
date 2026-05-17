@@ -86,6 +86,7 @@
                     <p class="text-gray-500">Loading...</p>
                 </div>
             </div>
+            <div id="delete-message" class="mt-3"></div>
         </section>
 
         <!-- Invoice Generation -->
@@ -108,8 +109,61 @@
         </section>
     </main>
 
-    <!-- Populate client dropdowns and update invoice form action -->
+    <!-- Handle client deletion and dropdown updates -->
     <script>
+        // Handle HTMX delete response: refresh clients and show success/error
+        document.addEventListener("htmx:afterRequest", function(event) {
+            const detail = event.detail;
+            const target = detail.target;
+            // Check if this was a delete request on a client button
+            if (detail.requestConfig && detail.requestConfig[0] &&
+                detail.requestConfig[0].method === "DELETE" &&
+                detail.requestConfig[0].pathInfo &&
+                detail.requestConfig[0].pathInfo.pathSegments &&
+                detail.requestConfig[0].pathInfo.pathSegments[0] === "/api/clients") {
+
+                const deleteMsg = document.getElementById("delete-message");
+                if (detail.successful) {
+                    // Success: show message and refresh clients
+                    if (deleteMsg) {
+                        deleteMsg.innerHTML = `<p class="text-green-400 text-sm">✓ Client deleted successfully.</p>`;
+                        setTimeout(() => { deleteMsg.innerHTML = ""; }, 3000);
+                    }
+                    // Refresh the clients table
+                    htmx.trigger(document.body, "loadClients");
+                } else {
+                    // Error: show error message
+                    let msg = "Unknown error.";
+                    try {
+                        const err = JSON.parse(detail.xhr.responseText);
+                        msg = err.detail || msg;
+                    } catch (e) {
+                        msg = "Could not delete client.";
+                    }
+                    if (deleteMsg) {
+                        deleteMsg.innerHTML = `<p class="text-red-400 text-sm">✗ ${msg}</p>`;
+                        setTimeout(() => { deleteMsg.innerHTML = ""; }, 5000);
+                    }
+                }
+            }
+        });
+
+        // Listen for loadClients trigger to refresh client dropdowns
+        document.addEventListener("loadClients", function() {
+            fetch("/api/clients")
+                .then(res => res.json())
+                .then(clients => {
+                    const options = '<option value="">Select Client</option>' +
+                        clients.map(c =>
+                            `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
+                        ).join("");
+
+                    document.querySelectorAll("select[name='client_id']").forEach(sel => {
+                        sel.innerHTML = options;
+                    });
+                });
+        });
+
         // Populate all client dropdowns on HTMX load
         document.addEventListener("htmx:load", function(event) {
             fetch("/api/clients")

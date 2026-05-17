@@ -237,8 +237,12 @@ class TestClientEndpoints:
             _create_client(client)
             response = client.get("/api/clients/html")
             assert response.status_code == 200
-            # Should only contain one "Test Corp" row
-            assert response.text.count("Test Corp") == 1
+            # Should only contain one "Test Corp" table row (name appears twice:
+            # once in the table cell, once in the hx-confirm attribute)
+            assert response.text.count("Test Corp") == 2
+            # Verify delete button is present
+            assert "hx-delete" in response.text
+            assert "hx-confirm" in response.text
 
 
 class TestTimeLogEndpoints:
@@ -617,3 +621,122 @@ class TestIntegrationWorkflows:
 
             # Unbilled should be empty
             assert "No unbilled time logs found" in client.get("/api/logs/unbilled").text
+
+
+class TestDeleteClient:
+    """Tests for the DELETE /api/clients/{client_id} endpoint."""
+
+    def test_delete_client_success(self):
+        """DELETE /api/clients/{id} removes the client."""
+        with TestClient(app) as client:
+            resp = client.post("/api/clients", json={
+                "name": "Delete Me", "email": "delete@test.com",
+                "billing_address": "123 Delete St", "default_hourly_rate": 50.00,
+            })
+            client_id = resp.json()["id"]
+
+            # Delete the client
+            delete_resp = client.delete(f"/api/clients/{client_id}")
+            assert delete_resp.status_code == 200
+            data = delete_resp.json()
+            assert "deleted successfully" in data["message"]
+
+            # Verify client is gone
+            list_resp = client.get("/api/clients")
+            assert all(c["name"] != "Delete Me" for c in list_resp.json())
+
+    def test_delete_client_not_found(self):
+        """DELETE /api/clients/999 returns 404."""
+        with TestClient(app) as client:
+            response = client.delete("/api/clients/999")
+            assert response.status_code == 404
+            assert "Client not found" in response.json()["detail"]
+
+    def test_delete_client_with_unbilled_logs(self):
+        """DELETE returns 409 if client has unbilled time logs."""
+        with TestClient(app) as client:
+            resp = client.post("/api/clients", json={
+                "name": "Stubborn Client", "email": "stub@test.com",
+                "billing_address": "456 Stub St", "default_hourly_rate": 75.00,
+            })
+            client_id = resp.json()["id"]
+
+            # Create an unbilled log
+            _create_log(client, client_id, hours=3.0, description="Unbilled work")
+
+            # Try to delete — should fail with 409
+            delete_resp = client.delete(f"/api/clients/{client_id}")
+            assert delete_resp.status_code == 409
+            assert "time log" in delete_resp.json()["detail"].lower()
+
+    def test_delete_client_with_billed_logs(self):
+        """DELETE returns 409 if client has any time logs (even billed ones)."""
+        with TestClient(app) as client:
+            resp = client.post("/api/clients", json={
+                "name": "Billed Client", "email": "billed@test.com",
+                "billing_address": "789 Billed Ave", "default_hourly_rate": 100.00,
+            })
+            client_id = resp.json()["id"]
+
+            # Create logs and generate an invoice
+            _create_log(client, client_id, hours=5.0, description="Billed work")
+            client.post(f"/api/clients/{client_id}/invoices")
+
+            # Try to delete — should fail because time logs exist
+            delete_resp = client.delete(f"/api/clients/{client_id}")
+            assert delete_resp.status_code == 409
+
+    def test_delete_client_empty_logs(self):
+        """DELETE succeeds when client has no time logs."""
+        with TestClient(app) as client:
+            resp = client.post("/api/clients", json={
+                "name": "Empty Client", "email": "empty@test.com",
+                "billing_address": "000 Empty Rd", "default_hourly_rate": 200.00,
+            })
+            client_id = resp.json()["id"]
+
+            # No logs created — should delete fine
+            delete_resp = client.delete(f"/api/clients/{client_id}")
+            assert delete_resp.status_code == 200
+            assert "deleted successfully" in delete_resp.json()["message"]
+
+    def test_delete_client_removes_from_dropdown(self):
+        """Deleted client is removed from the client dropdown."""
+        with TestClient(app) as client:
+            # Create two clients
+            resp1 = client.post("/api/clients", json={
+                "name": "Keep This", "email": "keep@test.com",
+                "billing_address": "111 Keep St", "default_hourly_rate": 100.00,
+            })
+            resp2 = client.post("/api/clients", json={
+                "name": "Delete This", "email": "del@test.com",
+                "billing_address": "222 Drop St", "default_hourly_rate": 100.00,
+            })
+            keep_id = resp1.json()["id"]
+            del_id = resp2.json()["id"]
+
+            # Delete one
+            client.delete(f"/api/clients/{del_id}")
+
+            # Verify only one remains
+            list_resp = client.get("/api/clients")
+            data = list_resp.json()
+            assert len(data) == 1
+            assert data[0]["name"] == "Keep This"
+
+    def test_delete_html_response(self):
+        """GET /api/clients/html includes delete buttons with correct data."""
+        with TestClient(app) as client:
+            resp = client.post("/api/clients", json={
+                "name": "HTML Test", "email": "html@test.com",
+                "billing_address": "333 Html Ave", "default_hourly_rate": 100.00,
+            })
+            client_id = resp.json()["id"]
+
+            html_resp = client.get("/api/clients/html")
+            assert html_resp.status_code == 200
+            assert "text/html" in html_resp.headers["content-type"]
+            assert "HTML Test" in html_resp.text
+            # Verify delete button is present
+            assert f'hx-delete="/api/clients/{client_id}"' in html_resp.text
+            assert "hx-confirm" in html_resp.text
