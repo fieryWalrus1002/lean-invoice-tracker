@@ -90,6 +90,39 @@ async def list_clients(session: Session = Depends(get_session)):
     return clients
 
 
+@app.get("/api/clients/html", response_class=HTMLResponse)
+async def list_clients_html(session: Session = Depends(get_session)):
+    """Returns an HTML list of clients (used by HTMX for the clients container)."""
+    clients = session.exec(select(Client)).all()
+
+    if not clients:
+        return HTMLResponse(
+            content='<p class="text-gray-500 py-2">No clients yet. Add one above.</p>'
+        )
+
+    rows = ""
+    for c in clients:
+        rows += f"""<tr class="border-b border-gray-700">
+            <td class="py-2 pr-4">{c.name}</td>
+            <td class="py-2 pr-4">{c.email}</td>
+            <td class="py-2 pr-4">{c.default_hourly_rate}</td>
+        </tr>"""
+
+    html = f"""<table class="w-full text-sm text-left">
+        <thead class="text-gray-400 border-b border-gray-700">
+            <tr>
+                <th class="py-2 pr-4">Name</th>
+                <th class="py-2 pr-4">Email</th>
+                <th class="py-2 pr-4">Hourly Rate</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows}
+        </tbody>
+    </table>"""
+    return HTMLResponse(content=html)
+
+
 @app.post("/api/logs", response_model=TimeLogResponse)
 async def create_time_log(
     request: Request,
