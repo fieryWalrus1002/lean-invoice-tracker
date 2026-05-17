@@ -13,8 +13,8 @@
 | Area | Status |
 |------|--------|
 | Core implementation | ✅ All 5 modules complete |
-| API endpoints | ✅ 10 endpoints working |
-| UI | ✅ HTMX dashboard with dynamic dropdowns |
+| API endpoints | ✅ 11 endpoints working (including DELETE /api/clients/{id}) |
+| UI | ✅ HTMX dashboard with dynamic dropdowns, live table updates, confirmation dialogs |
 | PDF generation | ✅ Jinja2 template + WeasyPrint |
 | Test suite | ✅ 94 pytest + 8 smoke tests |
 | Production hardening | ✅ Validation, logging, atomic invoices |
@@ -69,9 +69,14 @@ docker compose up --build -d
 
 - **Invoice numbering:** Atomic sequence table (`InvoiceSequence`) prevents collisions
 - **PDF rendering:** `invoice.html` template rendered via Jinja2, converted to PDF via WeasyPrint
-- **HTMX:** Dashboard uses HTMX for dynamic client dropdowns and live updates
+- **HTMX:** Dashboard uses HTMX for dynamic client dropdowns, live table updates, and confirmation dialogs
 - **Database:** SQLite with WAL mode, sequence table for atomic counters
 - **Validation:** Pydantic validators on `TimeLogCreate` (hours > 0, date ≤ today)
+
+### Recent HTMX Fixes
+
+- **Client table refresh:** Delete button now refreshes both the clients table and dropdowns (was only refreshing dropdowns)
+- **Unbilled logs auto-refresh:** Submitting a time log now immediately updates the unbilled table (was requiring page reload)
 
 ### Dependencies
 
@@ -85,7 +90,7 @@ docker compose up --build -d
 
 ### What to Do First
 
-1. **Run `uv run pytest`** — verify all 83 tests pass
+1. **Run `uv run pytest`** — verify all 94 tests pass
 2. **Run `uv run python scripts/smoke_test.py`** — verify live integration
 3. **Read `PROJECT_STATUS.md`** — full status and known issues
 4. **Read `specs/project.md`** — system design specification
