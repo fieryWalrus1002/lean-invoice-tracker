@@ -1,0 +1,29 @@
+# Docker Compose file for Lean Invoice Tracker and Job Scraper Pipeline
+# Will run them on same lcx instance, but they will be separate containers
+
+version: '3.8'
+
+services:
+  # App 1: Lean Invoice Tracker
+  invoice-tracker:
+    build:
+      context: ./invoice-app
+      dockerfile: src/Dockerfile
+    container_name: lean_invoice_tracker
+    ports:
+      - "8085:8000"
+    volumes:
+      - ./invoice-app/data:/app/data
+      - ./invoice-app/backups:/app/backups
+    restart: unless-stopped
+
+  # App 2: job scraper pipeline
+  job-scraper:
+    build:
+      context: ./job-scraper-app
+    container_name: job_scraper_pipeline
+    ports:
+      - "8086:8000"
+    volumes:
+      - ./job-scraper-app/data:/app/data
+    restart: unless-stopped
