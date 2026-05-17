@@ -34,8 +34,10 @@
                     <option value="">Select Client</option>
                 </select>
                 <input type="date" name="date" id="log-date"
+                       min="2000-01-01" max="{{ today }}"
                        class="bg-gray-900 border border-gray-700 p-2 rounded">
                 <input type="number" step="0.25" name="hours" placeholder="Hours"
+                       min="0.25" max="24"
                        class="bg-gray-900 border border-gray-700 p-2 rounded">
                 <input type="text" name="description" placeholder="Task execution metrics..."
                        class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">

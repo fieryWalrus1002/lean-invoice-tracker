@@ -77,6 +77,13 @@ docker compose up --build -d
 
 - **Client table refresh:** Delete button now refreshes both the clients table and dropdowns (was only refreshing dropdowns)
 - **Unbilled logs auto-refresh:** Submitting a time log now immediately updates the unbilled table (was requiring page reload)
+- **Form date field fix:** Form field named `date` but endpoint parameter was `date_str`, causing all submissions to use today's date (was fixed in #13)
+
+### Known Issues
+
+- [#13] Form date field not submitted — Fixed (parameter renamed to `date`, HTML constraints added)
+- [#14] CSV upload error handling — Silently skips malformed rows (should log warnings)
+- [#15] Limited error messages — Generic HTTP errors, not user-friendly
 
 ### Dependencies
 
