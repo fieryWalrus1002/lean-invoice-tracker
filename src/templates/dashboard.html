@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lean Invoice Tracker</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-900 text-gray-100 p-8">
+    <main class="max-w-4xl mx-auto space-y-8">
+        <header class="border-b border-gray-800 pb-4">
+            <h1 class="text-2xl font-mono tracking-wider text-green-400">LEAN_INVOICE_TRACKER //</h1>
+        </header>
+
+        <!-- Time Log Input Form Component -->
+        <section class="bg-gray-800 p-6 rounded border border-gray-700">
+            <h2 class="text-lg font-bold mb-4">Log Daily Operations</h2>
+            <form hx-post="/api/logs"
+                  hx-target="#unbilled-table-container"
+                  hx-on::after-request="if(event.detail.successful) this.reset()"
+                  class="grid grid-cols-5 gap-4">
+                <select name="client_id" id="client-select" required
+                        class="bg-gray-900 border border-gray-700 p-2 rounded">
+                    <option value="">Select Client</option>
+                </select>
+                <input type="date" name="date" id="log-date"
+                       class="bg-gray-900 border border-gray-700 p-2 rounded">
+                <input type="number" step="0.25" name="hours" placeholder="Hours"
+                       class="bg-gray-900 border border-gray-700 p-2 rounded">
+                <input type="text" name="description" placeholder="Task execution metrics..."
+                       class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
+                <button type="submit"
+                        class="bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded col-span-5">
+                    Commit Work Log
+                </button>
+            </form>
+            <p class="text-gray-400 text-sm mt-4">
+                Note: Client dropdown is populated via HTMX on page load from <code>/api/clients</code> endpoint.
+            </p>
+        </section>
+
+        <!-- Unbilled Logs Table (HTMX-driven) -->
+        <section id="unbilled-table-container"
+                 hx-get="/api/logs/unbilled"
+                 hx-trigger="load">
+            <div class="bg-gray-800 p-6 rounded border border-gray-700">
+                <p class="text-gray-500">Loading...</p>
+            </div>
+        </section>
+
+        <!-- Client Management -->
+        <section class="bg-gray-800 p-6 rounded border border-gray-700">
+            <h2 class="text-lg font-bold mb-4">Clients</h2>
+            <form id="add-client-form"
+                  hx-post="/api/clients"
+                  hx-target="#clients-container"
+                  hx-swap="afterbegin"
+                  class="grid grid-cols-5 gap-4 mb-6">
+                <input type="text" name="name" placeholder="Client name" required
+                       class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
+                <input type="email" name="email" placeholder="Email" required
+                       class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
+                <input type="text" name="billing_address" placeholder="Billing address"
+                       class="bg-gray-900 border border-gray-700 p-2 rounded">
+                <input type="number" step="0.01" name="default_hourly_rate" placeholder="Hourly rate"
+                       class="bg-gray-900 border border-gray-700 p-2 rounded">
+                <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold p-2 rounded col-span-5">
+                    Add Client
+                </button>
+            </form>
+            <div id="clients-container">
+                <!-- Populated via HTMX on page load -->
+            </div>
+        </section>
+
+        <!-- Invoice Generation -->
+        <section class="bg-gray-800 p-6 rounded border border-gray-700">
+            <h2 class="text-lg font-bold mb-4">Generate Invoice</h2>
+            <form id="invoice-form"
+                  hx-post="/api/clients/__CLIENT_ID__/invoices"
+                  hx-target="#unbilled-table-container"
+                  hx-swap="innerHTML"
+                  class="grid grid-cols-3 gap-4">
+                <select name="client_id" id="invoice-client-select" required
+                        class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
+                    <option value="">Select Client</option>
+                </select>
+                <button type="submit"
+                        class="bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded">
+                    Generate Invoice
+                </button>
+            </form>
+        </section>
+    </main>
+
+    <!-- Populate client dropdowns via HTMX -->
+    <script>
+        document.addEventListener("htmx:load", function(event) {
+            fetch("/api/clients")
+                .then(res => res.json())
+                .then(clients => {
+                    const options = '<option value="">Select Client</option>' +
+                        clients.map(c =>
+                            `<option value="${c.id}">${c.name} (${c.default_hourly_rate}/h)</option>`
+                        ).join("");
+
+                    document.querySelectorAll("select[name='client_id']").forEach(sel => {
+                        sel.innerHTML = options;
+                    });
+                });
+        });
+    </script>
+</body>
+</html>

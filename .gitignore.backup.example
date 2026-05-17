@@ -1,7 +1,0 @@
-# Ignore the database file and its related files
-data/invoices.db
-data/invoices.db-journal
-data/invoices.db-wal
-__pycache__/
-.env
-.venv/

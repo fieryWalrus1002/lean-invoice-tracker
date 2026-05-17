@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  invoice-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lean_invoice_tracker
+    ports:
+      - "8085:8000"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    environment:
+      - DATABASE_URL=sqlite:///app/data/invoices.db
+      - ENV=production
+    restart: unless-stopped
