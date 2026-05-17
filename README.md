@@ -89,8 +89,11 @@ log_hours 1 2.0 "Code review" "2026-05-15"
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/clients` | Create a client |
-| `GET` | `/api/clients` | List all clients |
+| `POST` | `/api/clients` | Create a client (deduplicates by name) |
+| `GET` | `/api/clients` | List all clients (deduplicated) |
+| `GET` | `/api/clients/html` | List clients as HTML (HTMX) |
+
+**Note:** Creating a client with a name that already exists returns the existing client instead of creating a duplicate. Listing clients always returns unique entries.
 
 **Create client example:**
 
@@ -153,6 +156,7 @@ curl -o invoice-2026-0001.pdf http://localhost:8000/api/invoices/1/pdf
 | `hours` | Must be a positive number |
 | `date` | Cannot be in the future |
 | `client_id` | Required, must reference an existing client |
+| `name` (client) | Must be unique — duplicate names return the existing client |
 
 Invalid submissions return `422 Unprocessable Entity` with a detail message.
 
@@ -200,7 +204,7 @@ lean-invoice-tracker/
 uv run pytest
 ```
 
-83 tests covering models, database, services, API endpoints, and PDF generation.
+87 tests covering models, database, services, API endpoints, and PDF generation.
 
 ### Smoke Tests
 
