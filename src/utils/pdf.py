@@ -2,6 +2,7 @@ from io import BytesIO
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlmodel import select
 
 from src.models import Client, Invoice, TimeLog
 
@@ -34,11 +35,9 @@ def compile_invoice_pdf(invoice: Invoice, session: Session) -> bytes:
 
     # Fetch related data
     client: Client = session.get(Client, invoice.client_id)
-    time_logs: list[TimeLog] = (
-        session.query(TimeLog)
-        .filter(TimeLog.invoice_id == invoice.id)
-        .all()
-    )
+    time_logs: list[TimeLog] = session.exec(
+        select(TimeLog).where(TimeLog.invoice_id == invoice.id)
+    ).all()
 
     # Build PDF
     buffer = BytesIO()
