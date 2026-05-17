@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import date as _date
 from pathlib import Path
@@ -25,6 +26,13 @@ from src.services import (
     get_unbilled_logs,
 )
 
+# Configure root logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Lean Invoice Tracker")
 
 # Resolve the templates directory relative to this file
@@ -39,6 +47,7 @@ templates = Jinja2Templates(env=template_env)
 
 # Create tables on startup
 create_db_and_tables()
+logger.info("Database tables created / verified")
 
 
 # ── Dashboard UI ─────────────────────────────────────────────────────────────
@@ -46,6 +55,7 @@ create_db_and_tables()
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Renders the front-end dashboard UI template."""
+    logger.debug("Dashboard request received")
     return templates.TemplateResponse(request, "dashboard.html")
 
 
@@ -53,7 +63,12 @@ async def dashboard(request: Request):
 
 @app.post("/api/clients", response_model=ClientResponse)
 async def create_client(client: ClientCreate, session: Session = Depends(get_session)):
-    """Creates a new tracking client profile."""
+    """Creates a new tracking client profile.
+
+    Expects a JSON body with ``name``, ``email``, ``billing_address``,
+    and optionally ``default_hourly_rate`` (defaults to 0.00).
+    """
+    logger.info("Creating client: %s", client.name)
     db_client = Client(
         name=client.name,
         email=client.email,
@@ -63,6 +78,7 @@ async def create_client(client: ClientCreate, session: Session = Depends(get_ses
     session.add(db_client)
     session.commit()
     session.refresh(db_client)
+    logger.info("Client created: id=%s name=%s", db_client.id, db_client.name)
     return db_client
 
 
@@ -70,10 +86,9 @@ async def create_client(client: ClientCreate, session: Session = Depends(get_ses
 async def list_clients(session: Session = Depends(get_session)):
     """Lists all active client profiles."""
     clients = session.exec(select(Client)).all()
+    logger.debug("Listed %d clients", len(clients))
     return clients
 
-
-# ── API: Time Logs ───────────────────────────────────────────────────────────
 
 @app.post("/api/logs", response_model=TimeLogResponse)
 async def create_time_log(
@@ -84,7 +99,20 @@ async def create_time_log(
     date_str: Optional[str] = Form(None),
     session: Session = Depends(get_session),
 ):
-    """Records a manual time-tracking entry. Accepts JSON (CLI) or form data (HTMX)."""
+    """Records a manual time-tracking entry. Accepts JSON (CLI) or form data (HTMX).
+
+    **JSON body (CLI):**
+    ```json
+    {"client_id": 1, "hours": 4.5, "description": "Task", "date": "2026-05-17"}
+    ```
+
+    **Form data (HTMX):**
+    Fields: ``client_id``, ``hours``, ``description``, ``date`` (optional).
+    """
+    logger.debug(
+        "Creating time log: client_id=%s hours=%s", client_id, hours,
+    )
+
     # Try parsing from form data first (HTMX submission)
     form_data = client_id is not None and hours is not None and description is not None
 
@@ -101,6 +129,7 @@ async def create_time_log(
         try:
             body = await request.json()
         except Exception:
+            logger.warning("Invalid JSON body on /api/logs")
             return JSONResponse(
                 status_code=422,
                 content={"detail": "Invalid JSON body"},
@@ -108,6 +137,7 @@ async def create_time_log(
         try:
             create_data = TimeLogCreate(**body)
         except ValidationError as e:
+            logger.warning("Validation error on /api/logs: %s", e)
             return JSONResponse(
                 status_code=422,
                 content={"detail": str(e)},
@@ -125,6 +155,10 @@ async def create_time_log(
     session.add(db_log)
     session.commit()
     session.refresh(db_log)
+    logger.info(
+        "Time log created: id=%s client_id=%s date=%s hours=%.2f",
+        db_log.id, db_log.client_id, db_log.date, db_log.hours,
+    )
     return db_log
 
 
@@ -133,20 +167,45 @@ async def upload_csv(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ):
-    """Multi-part form upload for bulk CSV parsing."""
+    """Multi-part form upload for bulk CSV parsing.
+
+    Expects a CSV file with columns: ``client_id,date,hours,description``.
+    Malformed rows are skipped and logged as warnings.
+    """
+    logger.info("CSV upload received: %s", file.filename)
     contents = await file.read()
     text = contents.decode("utf-8")
     lines = text.strip().splitlines()
 
     created = 0
-    for line in lines[1:]:  # skip header
+    skipped = 0
+    for line_num, line in enumerate(lines[1:], start=2):  # skip header
         parts = line.split(",")
         if len(parts) < 4:
+            logger.warning("CSV line %d: malformed row (expected 4 columns, got %d)", line_num, len(parts))
+            skipped += 1
             continue
-        client_id = int(parts[0])
-        log_date = _date.fromisoformat(parts[1])
-        hours = float(parts[2])
-        description = parts[3]
+        try:
+            client_id = int(parts[0])
+            log_date = _date.fromisoformat(parts[1])
+            hours = float(parts[2])
+            description = parts[3]
+        except (ValueError, IndexError) as exc:
+            logger.warning("CSV line %d: parse error – %s", line_num, exc)
+            skipped += 1
+            continue
+
+        # Validate hours is positive
+        if hours <= 0:
+            logger.warning("CSV line %d: hours must be positive (%.2f), skipping", line_num, hours)
+            skipped += 1
+            continue
+
+        # Validate date is not in the future
+        if log_date > _date.today():
+            logger.warning("CSV line %d: date is in the future (%s), skipping", line_num, log_date)
+            skipped += 1
+            continue
 
         db_log = TimeLog(
             client_id=client_id,
@@ -158,7 +217,11 @@ async def upload_csv(
         created += 1
 
     session.commit()
-    return JSONResponse(content={"message": f"Imported {created} time logs."})
+    detail = f"Imported {created} time logs."
+    if skipped:
+        detail += f" Skipped {skipped} invalid row(s)."
+    logger.info("CSV upload complete: %s", detail)
+    return JSONResponse(content={"message": detail})
 
 
 @app.get("/api/logs/unbilled", response_class=HTMLResponse)
@@ -166,7 +229,10 @@ async def unbilled_logs_html(
     client_id: Optional[int] = Query(None),
     session: Session = Depends(get_session),
 ):
-    """Returns an HTML table fragment of unbilled logs (used by HTMX)."""
+    """Returns an HTML table fragment of unbilled logs (used by HTMX).
+
+    Optional query param ``client_id`` filters results to a specific client.
+    """
     logs = get_unbilled_logs(session, client_id)
 
     if not logs:
@@ -208,7 +274,11 @@ async def create_invoice(
     client_id: int,
     session: Session = Depends(get_session),
 ):
-    """Compiles unbilled logs into an invoice."""
+    """Compiles unbilled logs into an invoice.
+
+    Generates a new invoice from all unbilled time logs for the given client.
+    Returns 404 if the client doesn't exist, 400 if there are no unbilled logs.
+    """
     invoice = generate_invoice_transaction(session, client_id)
     return InvoiceResponse.model_validate(invoice)
 
@@ -216,9 +286,12 @@ async def create_invoice(
 @app.get("/api/invoices/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(invoice_id: int, session: Session = Depends(get_session)):
     """Fetches raw structured metadata of an invoice."""
+    logger.debug("Fetching invoice: id=%s", invoice_id)
     invoice = session.get(Invoice, invoice_id)
     if not invoice:
+        logger.warning("Invoice not found: id=%s", invoice_id)
         raise HTTPException(status_code=404, detail="Invoice not found.")
+    logger.info("Invoice fetched: %s", invoice.invoice_number)
     return InvoiceResponse.model_validate(invoice)
 
 
@@ -232,11 +305,14 @@ async def export_invoice_pdf(
     """Generates and streams a compiled PDF document."""
     from src.utils.pdf import compile_invoice_pdf
 
+    logger.debug("Generating PDF for invoice: id=%s", invoice_id)
     invoice = session.get(Invoice, invoice_id)
     if not invoice:
+        logger.warning("Invoice not found for PDF: id=%s", invoice_id)
         raise HTTPException(status_code=404, detail="Invoice not found.")
 
     pdf_bytes = compile_invoice_pdf(invoice, session)
+    logger.info("PDF generated: %s (%d bytes)", invoice.invoice_number, len(pdf_bytes))
 
     return StreamingResponse(
         iter([pdf_bytes]),
@@ -250,7 +326,9 @@ async def export_invoice_pdf(
 # ── CLI Helper (legacy entry) ────────────────────────────────────────────────
 
 def main():
+    """Entry point for running the application with uvicorn."""
     import uvicorn
+    logger.info("Starting Lean Invoice Tracker server on 0.0.0.0:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

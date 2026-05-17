@@ -1,3 +1,10 @@
+"""PDF compilation for invoices using ReportLab.
+
+Provides ``compile_invoice_pdf()`` which takes an ``Invoice`` and a
+SQLModel ``Session``, fetches the related client and time logs, and
+returns a bytes object containing the compiled PDF document.
+"""
+
 from io import BytesIO
 from typing import Optional
 
@@ -26,7 +33,18 @@ except ImportError:
 
 
 def compile_invoice_pdf(invoice: Invoice, session: Session) -> bytes:
-    """Compile an invoice into a PDF document using ReportLab."""
+    """Compile an invoice into a PDF document using ReportLab.
+
+    Args:
+        invoice: The ``Invoice`` object to render.
+        session: Active SQLModel session for fetching related data.
+
+    Returns:
+        Bytes object containing the compiled PDF.
+
+    Raises:
+        RuntimeError: If reportlab is not installed.
+    """
     if not HAS_REPORTLAB:
         raise RuntimeError(
             "reportlab is required for PDF generation. "

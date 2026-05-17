@@ -1,3 +1,9 @@
+"""Database models for the Lean Invoice Tracker.
+
+Defines the SQLModel schemas for Client, TimeLog, and Invoice tables
+along with their relationships.
+"""
+
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated, List, Optional
@@ -7,6 +13,18 @@ from sqlmodel import SQLModel, Field, Relationship
 
 
 class Client(SQLModel, table=True):
+    """A client profile for time tracking and invoicing.
+
+    Attributes:
+        id: Primary key.
+        name: Client display name.
+        email: Contact email address.
+        billing_address: Billing address string.
+        default_hourly_rate: Default rate used when generating invoices.
+        time_logs: Related time log entries.
+        invoices: Related invoices.
+    """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     email: str
@@ -19,6 +37,20 @@ class Client(SQLModel, table=True):
 
 
 class TimeLog(SQLModel, table=True):
+    """A single time-tracking entry linked to a client.
+
+    Attributes:
+        id: Primary key.
+        date: Date the work was performed.
+        hours: Number of hours logged.
+        description: Description of the work performed.
+        is_billed: Whether this log has been included in an invoice.
+        client_id: FK to the associated client.
+        invoice_id: FK to the invoice this log was billed under (null if unbilled).
+        client: Related client profile.
+        invoice: Related invoice (null if unbilled).
+    """
+
     __tablename__ = "timelog"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -43,6 +75,20 @@ class TimeLog(SQLModel, table=True):
 
 
 class Invoice(SQLModel, table=True):
+    """An invoice aggregating unbilled time logs for a client.
+
+    Attributes:
+        id: Primary key.
+        invoice_number: Unique identifier (e.g. ``INV-2026-0001``).
+        issue_date: Date the invoice was issued.
+        due_date: Payment due date (typically 30 days after issue).
+        total_amount: Total amount in the client's currency.
+        status: Invoice status – ``Draft``, ``Sent``, ``Paid``, or ``Void``.
+        client_id: FK to the billed client.
+        client: Related client profile.
+        time_logs: Time log entries included in this invoice.
+    """
+
     __tablename__ = "invoice"
 
     id: Optional[int] = Field(default=None, primary_key=True)
