@@ -160,7 +160,7 @@
                 name: formData.get('name'),
                 email: formData.get('email'),
                 billing_address: formData.get('billing_address'),
-                default_hourly_rate: Number(formData.get('default_hourly_rate'))
+                default_hourly_rate: Number(formData.get('default_hourly_rate')) || 0
             };
 
             fetch('/api/clients', {
@@ -178,7 +178,7 @@
                 refreshClientDropdowns();
             })
             .catch(error => {
-                const message = error && error.message ? error.message : 'Request failed.';
+                const message = error.message || 'Request failed.';
                 showMessage('delete-message', '✗ ' + message, true);
             });
 
