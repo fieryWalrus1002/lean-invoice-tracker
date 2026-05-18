@@ -140,8 +140,12 @@
         function showMessage(elementId, text, isError) {
             const el = document.getElementById(elementId);
             if (el) {
-                el.innerHTML = '<p class="text-' + (isError ? 'red' : 'green') + '-400 text-sm">' + text + '</p>';
-                setTimeout(() => { el.innerHTML = ''; }, 5000);
+                el.textContent = '';
+                const message = document.createElement('p');
+                message.className = 'text-' + (isError ? 'red' : 'green') + '-400 text-sm';
+                message.textContent = text;
+                el.appendChild(message);
+                setTimeout(() => { el.textContent = ''; }, 5000);
             }
         }
         function parseErrorMessage(responseText) {
