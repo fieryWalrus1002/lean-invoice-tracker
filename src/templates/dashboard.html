@@ -213,8 +213,9 @@
                     .then(h => document.getElementById('invoices-container').innerHTML = h);
                 refreshClientDropdowns();
             })
-            .catch(() => {
-                showMessage('invoice-message', '✗ Failed to generate invoice.', true);
+            .catch(error => {
+                const message = error && error.message ? error.message : 'Failed to generate invoice.';
+                showMessage('invoice-message', '✗ ' + message, true);
             });
             return false;
         }
