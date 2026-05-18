@@ -62,9 +62,7 @@
         <section class="bg-gray-800 p-6 rounded border border-gray-700">
             <h2 class="text-lg font-bold mb-4">Clients</h2>
             <form id="add-client-form"
-                  hx-post="/api/clients"
-                  hx-swap="none"
-                  hx-on::after-request="handleClientFormResponse(event)"
+                  onsubmit="return handleClientSubmit(event)"
                   class="grid grid-cols-5 gap-4 mb-6">
                 <input type="text" name="name" placeholder="Client name" required
                        class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -154,14 +152,37 @@
         }
 
         // --- Add Client Form ---
-        function handleClientFormResponse(event) {
-            if (event.detail.successful) {
-                document.getElementById('add-client-form').reset();
+        function handleClientSubmit(event) {
+            event.preventDefault();
+            const form = document.getElementById('add-client-form');
+            const formData = new FormData(form);
+            const payload = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                billing_address: formData.get('billing_address'),
+                default_hourly_rate: Number(formData.get('default_hourly_rate'))
+            };
+
+            fetch('/api/clients', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(async r => {
+                if (!r.ok) {
+                    const responseText = await r.text();
+                    throw new Error(parseErrorMessage(responseText));
+                }
+                form.reset();
                 refreshClientsTable();
                 refreshClientDropdowns();
-            } else {
-                showMessage('delete-message', '✗ ' + parseErrorMessage(event.detail.xhr.responseText), true);
-            }
+            })
+            .catch(error => {
+                const message = error && error.message ? error.message : 'Request failed.';
+                showMessage('delete-message', '✗ ' + message, true);
+            });
+
+            return false;
         }
 
         // --- Invoice Form ---
