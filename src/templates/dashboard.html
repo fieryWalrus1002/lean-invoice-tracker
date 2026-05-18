@@ -106,6 +106,18 @@
             </form>
             <div id="invoice-message" class="mt-3"></div>
         </section>
+
+        <!-- Invoice History -->
+        <section class="bg-gray-800 p-6 rounded border border-gray-700">
+            <h2 class="text-lg font-bold mb-4">Invoice History</h2>
+            <div id="invoices-container"
+                 hx-get="/api/invoices/html"
+                 hx-trigger="load">
+                <div class="bg-gray-800 p-6 rounded border border-gray-700">
+                    <p class="text-gray-500">Loading...</p>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Handle HTMX responses -->
@@ -189,6 +201,9 @@
                 fetch('/api/logs/unbilled')
                     .then(r => r.text())
                     .then(h => document.getElementById('unbilled-table-container').innerHTML = h);
+                fetch('/api/invoices/html')
+                    .then(r => r.text())
+                    .then(h => document.getElementById('invoices-container').innerHTML = h);
                 refreshClientDropdowns();
             })
             .catch(() => {
