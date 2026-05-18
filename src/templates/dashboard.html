@@ -178,7 +178,7 @@
                 refreshClientDropdowns();
             })
             .catch(error => {
-                const message = error.message || 'Failed to add client. Please try again.';
+                const message = error.message || 'Failed to add client. Please check the form data and try again.';
                 showMessage('delete-message', '✗ ' + message, true);
             });
 
