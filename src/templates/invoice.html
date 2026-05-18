@@ -69,8 +69,8 @@
             <tr>
                 <td>{{ log.description }}</td>
                 <td class="text-center">{{ log.date.isoformat() }}</td>
-                <td class="text-right">{{ log.hours }}</td>
-                <td class="text-right">{{ client.default_hourly_rate }}.00</td>
+                <td class="text-right">{{ "%.2f"|format(log.hours) }}</td>
+                <td class="text-right">{{ "%.2f"|format(client.default_hourly_rate) }}</td>
                 <td class="text-right">{{ "%.2f"|format(log.hours * client.default_hourly_rate) }}</td>
             </tr>
             {% endfor %}

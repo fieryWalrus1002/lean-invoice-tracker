@@ -267,6 +267,34 @@ async def create_time_log(
     return db_log
 
 
+@app.delete("/api/logs/{log_id}", response_model=dict)
+async def delete_time_log(
+    log_id: int,
+    session: Session = Depends(get_session),
+):
+    """Deletes a single time log entry.
+
+    Returns 404 if the log doesn't exist.
+    Returns 409 if the log is already billed (part of an invoice).
+    """
+    log = session.get(TimeLog, log_id)
+    if not log:
+        logger.warning("Time log not found for deletion: id=%s", log_id)
+        raise HTTPException(status_code=404, detail="Time log not found.")
+
+    if log.is_billed:
+        logger.warning("Cannot delete billed time log: id=%s", log_id)
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete time log that is already billed.",
+        )
+
+    session.delete(log)
+    session.commit()
+    logger.info("Time log deleted: id=%s client_id=%s", log_id, log.client_id)
+    return {"message": "Time log deleted successfully", "id": log_id}
+
+
 @app.post("/api/logs/upload-csv")
 async def upload_csv(
     file: UploadFile = File(...),
@@ -354,6 +382,15 @@ async def unbilled_logs_html(
             <td class="py-2">
                 <span class="px-2 py-1 text-xs rounded bg-yellow-900 text-yellow-300">Unbilled</span>
             </td>
+            <td class="py-2">
+                <button
+                    hx-delete="/api/logs/{log.id}"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) {{ fetch('/api/logs/unbilled').then(r => r.text()).then(h => document.getElementById('unbilled-table-container').innerHTML = h); }}"
+                    hx-confirm="Delete this time log?"
+                    class="text-red-400 hover:text-red-300 text-xs font-bold"
+                >✗</button>
+            </td>
         </tr>"""
 
     html = f"""<table class="w-full text-sm text-left">
@@ -363,6 +400,7 @@ async def unbilled_logs_html(
                 <th class="py-2 pr-4">Hours</th>
                 <th class="py-2 pr-4">Description</th>
                 <th class="py-2">Status</th>
+                <th class="py-2">Action</th>
             </tr>
         </thead>
         <tbody>
@@ -386,6 +424,63 @@ async def create_invoice(
     """
     invoice = generate_invoice_transaction(session, client_id)
     return InvoiceResponse.model_validate(invoice)
+
+
+# ── API: Invoice Listing ─────────────────────────────────────────────────────
+
+@app.get("/api/invoices", response_model=list[InvoiceResponse])
+async def list_invoices(session: Session = Depends(get_session)):
+    """Returns all invoices for the client dropdowns."""
+    logger.debug("Listing invoices")
+    invoices = session.exec(select(Invoice).order_by(Invoice.id.desc())).all()
+    logger.info("Listed %d invoices", len(invoices))
+    return [InvoiceResponse.model_validate(inv) for inv in invoices]
+
+
+@app.get("/api/invoices/html", response_class=HTMLResponse)
+async def invoices_html(session: Session = Depends(get_session)):
+    """Returns an HTML table fragment of all invoices (used by HTMX)."""
+    invoices = session.exec(select(Invoice).order_by(Invoice.id.desc())).all()
+
+    if not invoices:
+        return HTMLResponse(
+            content='<p class="text-gray-500 py-2">No invoices generated yet.</p>'
+        )
+
+    table_rows = ""
+    for inv in invoices:
+        table_rows += f"""<tr class="border-b border-gray-700">
+            <td class="py-2 pr-4">{inv.invoice_number}</td>
+            <td class="py-2 pr-4">{inv.issue_date.isoformat()}</td>
+            <td class="py-2 pr-4">{inv.due_date.isoformat()}</td>
+            <td class="py-2 pr-4">{inv.total_amount:.2f}</td>
+            <td class="py-2">
+                <span class="px-2 py-1 text-xs rounded bg-green-900 text-green-300">{inv.status}</span>
+            </td>
+            <td class="py-2">
+                <a href="/api/invoices/{inv.id}/pdf" target="_blank"
+                   class="text-blue-400 hover:text-blue-300 text-xs font-bold">
+                    Download PDF
+                </a>
+            </td>
+        </tr>"""
+
+    html = f"""<table class="w-full text-sm text-left">
+        <thead class="text-gray-400 border-b border-gray-700">
+            <tr>
+                <th class="py-2 pr-4">Number</th>
+                <th class="py-2 pr-4">Issue Date</th>
+                <th class="py-2 pr-4">Due Date</th>
+                <th class="py-2 pr-4">Amount</th>
+                <th class="py-2 pr-4">Status</th>
+                <th class="py-2">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {table_rows}
+        </tbody>
+    </table>"""
+    return HTMLResponse(content=html)
 
 
 @app.get("/api/invoices/{invoice_id}", response_model=InvoiceResponse)
