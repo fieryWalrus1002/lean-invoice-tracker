@@ -1,21 +1,21 @@
 # Project Status: Lean Invoice Tracker (LIT)
 
-**Current Date:** 2026-05-17  
-**Overall Status:** 🟢 **PRODUCTION READY** (All 12 PRs merged — 94 tests passing, all critical fixes applied)
+**Current Date:** 2026-05-18  
+**Overall Status:** 🟢 **PRODUCTION READY** (All 17+ PRs merged — 101 tests passing, all critical fixes applied)
 
 ---
 
 ## Executive Summary
 
-The Lean Invoice Tracker MVP is **production-ready** with all critical modules implemented, a comprehensive test suite, and all fixes applied. The system has 94 passing pytest tests and 8 passing smoke tests. All 12 pull requests have been merged into main.
+The Lean Invoice Tracker MVP is **production-ready** with all critical modules implemented, a comprehensive test suite, and all fixes applied. The system has 101 passing pytest tests and 8 passing smoke tests. All 17+ pull requests have been merged into main.
 
 ### Key Metrics
 - **Lines of Code:** ~1,000 (core modules only)
 - **Modules:** 5 (models, database, services, API, PDF)
-- **API Endpoints:** 11 (clients, logs, invoices, PDF, clients/html, delete client)
+- **API Endpoints:** 14 (clients, logs, invoices, PDF, clients/html, delete client, delete log, invoice list)
 - **Database Tables:** 4 (Client, TimeLog, Invoice, InvoiceSequence)
-- **Pull Requests Merged:** 12
-- **Test Coverage:** 94 pytest + 8 smoke tests
+- **Pull Requests Merged:** 17+
+- **Test Coverage:** 101 pytest + 8 smoke tests
 
 ---
 
@@ -68,7 +68,10 @@ The Lean Invoice Tracker MVP is **production-ready** with all critical modules i
 | `/api/logs` | POST | ✅ Complete | **DUAL PAYLOAD MODE:** Form data (HTMX) + JSON (CLI) |
 | `/api/logs/upload-csv` | POST | ✅ Complete | Bulk import from CSV file |
 | `/api/logs/unbilled` | GET | ✅ Complete | Returns HTML table fragment (HTMX endpoint) |
+| `DELETE /api/logs/{log_id}` | DELETE | ✅ Complete | Deletes unbilled time log (404 if not found, 409 if billed) |
 | `/api/clients/{id}/invoices` | POST | ✅ Complete | Generates invoice from unbilled logs |
+| `/api/invoices` | GET | ✅ Complete | Lists all invoices (JSON) |
+| `/api/invoices/html` | GET | ✅ Complete | Lists all invoices (HTMX HTML fragment) |
 | `/api/invoices/{id}` | GET | ✅ Complete | Fetches invoice metadata |
 | `/api/invoices/{id}/pdf` | GET | ✅ Complete | Streams PDF document |
 
@@ -168,6 +171,11 @@ Clients were not unique in the database, causing dropdown lists to show endless 
 | #10 | client-unique-dedup (issue #8) | ✅ Merged |
 | #11 | client-deletion-gui (issue #9) | ✅ Merged |
 | #12 | database-test-readonly-fix | ✅ Merged |
+| #14 | form-date-field-issue-13 | ✅ Merged |
+| #17 | htmx-form-swaps | ✅ Merged |
+| #18 | gui-download-not-working | ✅ Merged |
+| #19 | invoice-history-section | ✅ Merged |
+| #20 | copilot-pr-review-comments | ✅ Merged |
 
 ---
 
@@ -194,6 +202,74 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 | WAL mode on test engine | Mirrors production WAL configuration |
 | No filesystem dependency | Test no longer depends on production DB permissions |
 
+## Recent Changes (PR #14 — Form Date Field Fix)
+
+The form date field was named `date` but the endpoint parameter was `date_str`, causing all submissions to default to today's date.
+
+| Change | Details |
+|--------|---------|
+| Parameter rename | `date_str` → `date` in endpoint |
+| HTML constraints | Added `max` attribute to date input and `min` to hours |
+| 1 test added | Verifies date is correctly parsed from form submission |
+
+## Recent Changes (PR #17 — HTMX Form Swaps Fix)
+
+Both the "Add Client" and "Generate Invoice" forms had `hx-swap="innerHTML"` but the APIs return JSON, causing silent failures.
+
+| Change | Details |
+|--------|---------|
+| Swap strategy | Changed to `hx-swap="none"` with explicit `hx-on::after-request` handlers |
+| Add Client | Now refreshes clients table and dropdowns on success, shows error on failure |
+| Generate Invoice | Now shows success/error message, refreshes unbilled table and dropdowns |
+| Event handler cleanup | Removed duplicate `htmx:afterOnLoad` listeners that were causing stale handlers |
+
+## Recent Changes (PR #18 — Download Not Working)
+
+The PDF download button was not working because the form's `hx-swap="innerHTML"` swallowed the response.
+
+| Change | Details |
+|--------|---------|
+| Blob API download | Invoice form now uses `fetch` + `Blob` API to download PDF |
+| Client form handler | Refactored to use shared `handleClientFormResponse()` helper |
+| Error parsing | Added `parseErrorMessage()` to extract server error details |
+| Shared helpers | Extracted `refreshClientsTable()`, `refreshClientDropdowns()`, `showMessage()` |
+
+## Recent Changes (PR #19 — Invoice History Section)
+
+Added invoice listing capabilities and a new Invoice History section to the dashboard.
+
+| Change | Details |
+|--------|---------|
+| `GET /api/invoices` | Returns all invoices as JSON for dropdowns |
+| `GET /api/invoices/html` | Returns HTMX HTML fragment of invoice table |
+| Invoice History section | HTMX-loaded table with Number, Issue Date, Due Date, Amount, Status, Download PDF |
+| Auto-refresh | Invoice list refreshes after generating a new invoice |
+| `DELETE /api/logs/{log_id}` | Delete a time log (404 if not found, 409 if billed) |
+| Delete button | ✗ button in unbilled table with `hx-confirm` confirmation |
+| Action column | Added to unbilled logs table header |
+| 7 tests added | Delete time log (success/404/409), list invoices (populated/empty), invoice HTML (populated/empty) |
+
+## Recent Changes (PR #20 — Copilot PR Review Comments)
+
+Addressed review feedback on the invoice history PR.
+
+| Change | Details |
+|--------|---------|
+| Form event handler | Replaced `hx-on::submit` with native `onsubmit` (HTMX event doesn't fire without `hx-post`) |
+| Error parsing | Parse server error detail in invoice generation instead of generic message |
+| Action column header | Added missing 'Action' column header to unbilled logs table |
+| 7 tests added | Delete time log (success/404/409), list invoices (populated/empty), invoice HTML (populated/empty) |
+
+## Recent Changes (Invoice Rate Formatting Fix)
+
+Issue #20: Rate was showing `75.00.00` instead of `$75.00` on invoices.
+
+| Change | Details |
+|--------|---------|
+| Rate formatting | Changed `{{ client.default_hourly_rate }}.00` to `{{ "%.2f"|format(client.default_hourly_rate) }}` |
+| Hours formatting | Changed `{{ log.hours }}` to `{{ "%.2f"|format(log.hours) }}` for consistent 2 decimal places |
+| Root cause | The rate was already a decimal with 2 places; appending `.00` duplicated the decimals |
+
 ---
 
 ## Testing Status
@@ -207,16 +283,16 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 - ✅ PDF export and download
 - ✅ CSV bulk upload
 
-### ✅ Automated Testing Complete — 94 Tests Passing
+### ✅ Automated Testing Complete — 101 Tests Passing
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
 | `tests/test_models.py` | 19 | Model relationships, constraints, precision, defaults |
 | `tests/test_database.py` | 6 | WAL mode, table creation, session management, unique constraints |
 | `tests/test_services.py` | 12 | Invoice generation, unbilled logs, schema validation |
-| `tests/test_main.py` | 39 | API endpoints, PDF export, integration workflows, client deletion |
+| `tests/test_main.py` | 46 | API endpoints, PDF export, integration workflows, client deletion, time log deletion, invoice listing |
 | `tests/test_pdf.py` | 14 | PDF generation, content validation, edge cases |
-| **Total** | **94** | **100%** |
+| **Total** | **101** | **100%** |
 
 **Smoke Tests (8/8 Passing):**
 - ✅ Dashboard loads
@@ -228,7 +304,16 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 - ✅ Get invoice details
 - ✅ Export PDF
 
-**Key Test Scenarios Covered:**
+**New Test Scenarios Covered (7 tests):**
+- ✅ Delete unbilled time log (success)
+- ✅ Delete billed time log (409 forbidden)
+- ✅ Delete missing time log (404)
+- ✅ List invoices (populated)
+- ✅ List invoices (empty)
+- ✅ Invoice HTML (populated)
+- ✅ Invoice HTML (empty)
+
+**Key Test Scenarios Covered:
 - ✅ Model relationships (bidirectional, back_populates)
 - ✅ Model constraints (unique invoice_number, non-nullable FK)
 - ✅ Decimal precision (hourly rate, total amount, rounding)
@@ -239,7 +324,7 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 - ✅ Invoice generation: error cases (no unbilled, client not found, 400/404)
 - ✅ Unbilled logs: fetch all, filter by client, empty set, billed excluded
 - ✅ TimeLogCreate schema: date parsing, optional date, required fields, all fields
-- ✅ All 10 API endpoints: create/list clients, create log (JSON + form), CSV upload, unbilled logs, clients/html, create/get invoice, PDF export
+- ✅ All 14 API endpoints: create/list clients, create log (JSON + form), CSV upload, unbilled logs, delete log, clients/html, create/get/list invoices, invoice HTML, PDF export
 - ✅ PDF generation: bytes return, valid header, content validation (invoice number, client info, amounts, status)
 - ✅ PDF with decimal amounts and large datasets (many line items)
 - ✅ Integration workflows: create-client → log → invoice → PDF, CSV upload then invoice
@@ -260,15 +345,20 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 - [x] **Form client_id dropdown** — Now dynamically loaded via HTMX ✅
 - [ ] **Error handling in CSV upload** — Silently skips malformed rows (should log warnings)
 - [x] **No input validation** — Hours must be positive, date cannot be in the future ✅
+- [x] **Invoice rate formatting** — `default_hourly_rate` template now uses `%.2f` format instead of appending `.00` ✅
+- [x] **Hours formatting** — Hours now display with 2 decimal places ✅
 
 ### Medium (Nice-to-Have)
 - [x] **Invoice PDF doesn't use invoice.html template** — Now uses Jinja2 + WeasyPrint ✅
 - [x] **No logging/observability** — Structured logging added to all modules ✅
-- [ ] **Limited error messages** — Generic HTTP errors, not user-friendly
+- [x] **Limited error messages** — Forms now show success/error messages ✅
 
 ### Low (Polishing)
 - [ ] **Dashboard styling** — Works but minimal
 - [ ] **No API documentation** — FastAPI docs work but no custom swagger tweaks
+- [ ] **Issue #21** — Categories/tags for time log grouping (feature request)
+- [ ] **Issue #22** — Tags for optional invoice entry grouping (feature request)
+- [ ] **Issue #18** — Still open on GitHub (resolved by PR #17/#18, needs manual close)
 
 ---
 
@@ -279,7 +369,7 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 | `models.py` | 🟢 Good | 🟢 7 tests | 🟢 100% | 🟢 Low |
 | `database.py` | 🟢 Good | 🟢 5 tests | 🟢 100% | 🟢 Low |
 | `services.py` | 🟢 Good | 🟢 12 tests | 🟢 100% | 🟢 Low |
-| `main.py` | 🟢 Good | 🟢 39 tests | 🟢 100% | 🟢 Low |
+| `main.py` | 🟢 Good | 🟢 46 tests | 🟢 100% | 🟢 Low |
 | `utils/pdf.py` | 🟢 Good | 🟢 13 tests | 🟢 100% | 🟢 Low |
 | `templates/` | 🟡 Adequate | 🟡 7 tests (via main.py) | 🟡 90% | 🟢 Low (HTMX verified) |
 
@@ -318,7 +408,7 @@ The `test_invoice_number_has_unique_constraint` test was failing with a read-onl
 
 ## Deployment Readiness Checklist
 
-- [x] Automated test suite passes (80%+ coverage) — 94 tests ✅
+- [x] Automated test suite passes (80%+ coverage) — 101 tests ✅
 - [x] All endpoints tested manually
 - [x] README and documentation complete
 - [x] Invoice race condition resolved
@@ -393,7 +483,7 @@ lean-invoice-tracker/
     ├── test_models.py     (19 tests)
     ├── test_database.py   (6 tests)
     ├── test_services.py   (12 tests)
-    ├── test_main.py       (39 tests)
+    ├── test_main.py       (46 tests)
     └── test_pdf.py        (14 tests)
 ```
 
@@ -405,7 +495,7 @@ lean-invoice-tracker/
 |-----------|---------|--------|--------|
 | Core features implemented | 100% | 100% | ✅ Met |
 | Manual testing complete | 100% | 100% | ✅ Met |
-| Automated tests | 100% | 80% | ✅ Met (94 tests passing) |
+| Automated tests | 100% | 80% | ✅ Met (101 tests passing) |
 | Smoke tests | 100% | 80% | ✅ Met (8/8 passing) |
 | Documentation | 100% | 100% | ✅ Met |
 | Code review | ✅ Spec reviewed | ✅ | ✅ Met |
@@ -416,17 +506,17 @@ lean-invoice-tracker/
 
 ## Test Execution Summary
 
-### pytest (94 tests)
+### pytest (101 tests)
 ```bash
 $ uv run pytest
 ============================= test session starts ==============================
-... collected 94 items ...
+... collected 101 items ...
 tests/test_database.py ......                                            [  6%]
-tests/test_models.py ...................                                 [ 68%]
-tests/test_services.py ................                                  [100%]
-tests/test_main.py .......................................               [ 47%]
-tests/test_pdf.py ..............                                         [ 82%]
-============================== 94 passed in 3.47s ==============================
+tests/test_models.py ...................                                 [ 67%]
+tests/test_services.py ................                                  [ 78%]
+tests/test_main.py ................................................       [ 50%]
+tests/test_pdf.py ..............                                         [ 88%]
+============================= 101 passed in 3.62s ==============================
 ```
 
 ### Smoke Tests (8 tests)

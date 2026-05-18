@@ -111,6 +111,7 @@ curl -X POST http://localhost:8000/api/clients \
 | `POST` | `/api/logs` | Create a time log (JSON or form) |
 | `POST` | `/api/logs/upload-csv` | Bulk import from CSV |
 | `GET` | `/api/logs/unbilled` | List unbilled logs (HTML fragment) |
+| `DELETE` | `/api/logs/{log_id}` | Delete a time log (404 if not found, 409 if billed) |
 
 **Create log (JSON):**
 
@@ -133,6 +134,8 @@ client_id,date,hours,description
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/clients/{id}/invoices` | Generate invoice from unbilled logs |
+| `GET` | `/api/invoices` | List all invoices (JSON) |
+| `GET` | `/api/invoices/html` | List all invoices (HTMX HTML fragment) |
 | `GET` | `/api/invoices/{id}` | Get invoice metadata |
 | `GET` | `/api/invoices/{id}/pdf` | Download invoice as PDF |
 
@@ -205,7 +208,7 @@ lean-invoice-tracker/
 uv run pytest
 ```
 
-94 tests covering models, database, services, API endpoints, and PDF generation.
+101 tests covering models, database, services, API endpoints, and PDF generation.
 
 ### Smoke Tests
 
