@@ -740,3 +740,126 @@ class TestDeleteClient:
             # Verify delete button is present
             assert f'hx-delete="/api/clients/{client_id}"' in html_resp.text
             assert "hx-confirm" in html_resp.text
+
+
+class TestTimeLogDeletion:
+    """Tests for DELETE /api/logs/{log_id}."""
+
+    def test_delete_unbilled_log_success(self):
+        """DELETE returns 200 and confirms deletion for an unbilled log."""
+        with TestClient(app) as client:
+            # Create client and log
+            client_resp = client.post("/api/clients", json={
+                "name": "Del Client", "email": "del@test.com",
+                "billing_address": "123 Test St", "default_hourly_rate": 50.00,
+            })
+            client_id = client_resp.json()["id"]
+            log_resp = client.post("/api/logs", json={
+                "client_id": client_id, "hours": 2.0,
+                "description": "Test log", "date": "2026-01-01",
+            })
+            log_id = log_resp.json()["id"]
+
+            # Delete the log
+            resp = client.delete(f"/api/logs/{log_id}")
+            assert resp.status_code == 200
+            assert resp.json()["message"] == "Time log deleted successfully"
+            assert resp.json()["id"] == log_id
+
+            # Verify it's gone from the unbilled list
+            unbilled_resp = client.get("/api/logs/unbilled")
+            assert str(resp.json()["id"]) not in unbilled_resp.text
+
+    def test_delete_billed_log_rejected(self):
+        """DELETE returns 409 for a log that is already billed."""
+        with TestClient(app) as client:
+            client_resp = client.post("/api/clients", json={
+                "name": "Billed Client", "email": "billed@test.com",
+                "billing_address": "123 Test St", "default_hourly_rate": 50.00,
+            })
+            client_id = client_resp.json()["id"]
+
+            # Create a log, generate invoice (bills it)
+            log_resp = client.post("/api/logs", json={
+                "client_id": client_id, "hours": 2.0,
+                "description": "Billed log", "date": "2026-01-01",
+            })
+            log_id = log_resp.json()["id"]
+            client.post(f"/api/clients/{client_id}/invoices")
+
+            # Now delete the billed log — should fail
+            resp = client.delete(f"/api/logs/{log_id}")
+            assert resp.status_code == 409
+            assert "already billed" in resp.json()["detail"]
+
+    def test_delete_missing_log_404(self):
+        """DELETE returns 404 for a non-existent log."""
+        with TestClient(app) as client:
+            resp = client.delete("/api/logs/99999")
+            assert resp.status_code == 404
+
+
+class TestInvoiceListing:
+    """Tests for GET /api/invoices."""
+
+    def test_list_invoices_populated(self):
+        """GET /api/invoices returns all invoices when they exist."""
+        with TestClient(app) as client:
+            client_resp = client.post("/api/clients", json={
+                "name": "List Client", "email": "list@test.com",
+                "billing_address": "123 Test St", "default_hourly_rate": 50.00,
+            })
+            client_id = client_resp.json()["id"]
+            client.post("/api/logs", json={
+                "client_id": client_id, "hours": 3.0,
+                "description": "Test", "date": "2026-01-01",
+            })
+            inv_resp = client.post(f"/api/clients/{client_id}/invoices")
+
+            resp = client.get("/api/invoices")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) >= 1
+            # The last invoice should match what we just created
+            assert data[-1]["invoice_number"] == inv_resp.json()["invoice_number"]
+            assert data[-1]["total_amount"] == 150.0
+
+    def test_list_invoices_empty(self):
+        """GET /api/invoices returns empty list when no invoices exist."""
+        with TestClient(app) as client:
+            resp = client.get("/api/invoices")
+            assert resp.status_code == 200
+            assert resp.json() == []
+
+
+class TestInvoiceHistoryHTML:
+    """Tests for GET /api/invoices/html."""
+
+    def test_invoices_html_populated(self):
+        """GET /api/invoices/html returns HTML table when invoices exist."""
+        with TestClient(app) as client:
+            client_resp = client.post("/api/clients", json={
+                "name": "HTML Invoice Client", "email": "htmlinv@test.com",
+                "billing_address": "123 Test St", "default_hourly_rate": 50.00,
+            })
+            client_id = client_resp.json()["id"]
+            client.post("/api/logs", json={
+                "client_id": client_id, "hours": 1.0,
+                "description": "Test", "date": "2026-01-01",
+            })
+            inv_resp = client.post(f"/api/clients/{client_id}/invoices")
+
+            resp = client.get("/api/invoices/html")
+            assert resp.status_code == 200
+            assert "text/html" in resp.headers["content-type"]
+            assert inv_resp.json()["invoice_number"] in resp.text
+            assert "Download PDF" in resp.text
+            assert "Draft" in resp.text
+
+    def test_invoices_html_empty(self):
+        """GET /api/invoices/html returns empty message when no invoices."""
+        with TestClient(app) as client:
+            resp = client.get("/api/invoices/html")
+            assert resp.status_code == 200
+            assert "text/html" in resp.headers["content-type"]
+            assert "No invoices generated yet" in resp.text

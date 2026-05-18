@@ -93,7 +93,7 @@
         <section class="bg-gray-800 p-6 rounded border border-gray-700">
             <h2 class="text-lg font-bold mb-4">Generate Invoice</h2>
             <form id="invoice-form"
-                  hx-on::submit="return handleInvoiceSubmit(event)"
+                  onsubmit="return handleInvoiceSubmit(event)"
                   class="grid grid-cols-3 gap-4">
                 <select name="client_id" id="invoice-client-select" required
                         class="bg-gray-900 border border-gray-700 p-2 rounded col-span-2">
@@ -176,8 +176,11 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             })
-            .then(r => {
-                if (!r.ok) throw new Error('Failed');
+            .then(async r => {
+                if (!r.ok) {
+                    const err = await r.json();
+                    throw new Error(err.detail || 'Failed');
+                }
                 return r.json();
             })
             .then(data => {

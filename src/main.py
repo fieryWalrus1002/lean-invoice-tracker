@@ -400,6 +400,7 @@ async def unbilled_logs_html(
                 <th class="py-2 pr-4">Hours</th>
                 <th class="py-2 pr-4">Description</th>
                 <th class="py-2">Status</th>
+                <th class="py-2">Action</th>
             </tr>
         </thead>
         <tbody>
