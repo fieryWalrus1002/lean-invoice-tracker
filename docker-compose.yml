@@ -15,3 +15,30 @@ services:
       - DATABASE_URL=sqlite:///app/data/invoices.db
       - ENV=production
     restart: unless-stopped
+
+  # Dev sandbox to limit coding harness blast radius. 
+  # Usage: 
+  # docker compose up -d dev-sandbox 
+  # And when its up:
+  # docker compose exec -it dev-sandbox bash
+  # 
+  dev-sandbox:
+    image: python:3.11-slim
+    container_name: lean_invoice_tracker_sandbox
+    # Force container to use my host permissions, so written files are not root
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      # Mounts the full repo directory so changes reflect on host machine instantly
+      # but are owned by me instead of root. that was annoying.
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - DATABASE_URL=sqlite:///workspace/data/invoices_dev.db
+      - ENV=development
+      - PYTHONUNBUFFERED=1
+    # Installs required OS tools, the 'uv' package manager, links environment, and sleeps
+    command: >
+      sh -c "apt-get update && apt-get install -y --no-install-recommends git sqlite3 libpango-1.0-0 libpangoft2-1.0-0 fonts-liberation fonts-noto-cjk
+      && pip install --no-cache-dir uv
+      && uv sync
+      && sleep infinity"
